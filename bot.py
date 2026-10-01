@@ -11,7 +11,7 @@ def menu():
     k.add(B("📊 Статистика", callback_data="st"), B("👥 Гравці", callback_data="us"))
     k.add(B("💳 Поповнення", callback_data="dp"), B("📤 Виводи", callback_data="wd"))
     k.add(B("📜 Журнал", callback_data="lg"))
-    if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))  # Telegram не приймає http/localhost у кнопках
+    if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))
     return k
 
 
@@ -39,6 +39,10 @@ def edit(c, text, kb):
 def cb(c):
     if c.from_user.id not in ADMINS:
         return bot.answer_callback_query(c.id, "Немає доступу", show_alert=True)
+    
+    # Мгновенно сообщаем Telegram, что кнопка нажата (убирает бесконечную загрузку)
+    bot.answer_callback_query(c.id)
+    
     d = c.data; con = db()
     if d == "menu":
         edit(c, "🔐 NeonDrop — адмін-панель", menu())
@@ -78,7 +82,7 @@ def cb(c):
     elif d.startswith("wd_ok:"):
         cur = con.execute("UPDATE inv SET status='withdrawn' WHERE id=? AND status='withdraw'", (int(d[6:]),)); con.commit()
         bot.edit_message_text(f"{c.message.text}\n\n{'✅ Виконано' if cur.rowcount else 'Вже оброблено'}", c.message.chat.id, c.message.message_id)
-    con.close(); bot.answer_callback_query(c.id)
+    con.close()
 
 
 if __name__ == "__main__":
