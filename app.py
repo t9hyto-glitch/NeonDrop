@@ -1,7 +1,15 @@
-import os, re, random, sqlite3, requests
+import sys
+import os
+import subprocess
+import re, random, sqlite3, requests
 from urllib.parse import urlencode
 from flask import Flask, request, session, jsonify, render_template, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
+
+# Гарантированный запуск бота в среде Render (с защитой от зацикливания)
+if "bot.py" not in sys.argv[0] and not os.environ.get("BOT_SPAWNED"):
+    os.environ["BOT_SPAWNED"] = "1"
+    subprocess.Popen([sys.executable, "bot.py"])
 
 # ---------- Конфіг ----------
 TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAERO-v0t914iHCGtgWZxYnTi8wJRAx1ye4")
