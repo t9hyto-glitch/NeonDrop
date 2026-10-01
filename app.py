@@ -1,21 +1,30 @@
-import os, re, random, sqlite3, requests, threading
+import sys
+import os
+import subprocess
+import re, random, sqlite3, requests
 from urllib.parse import urlencode
 from flask import Flask, request, session, jsonify, render_template, redirect
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+# Гарантированный запуск бота и на Render, и локально (без циклических импортов)
+if "bot.py" not in sys.argv[0] and not os.environ.get("BOT_SPAWNED"):
+    os.environ["BOT_SPAWNED"] = "1"
+    subprocess.Popen([sys.executable, "bot.py"])
 
 # ---------- Конфіг ----------
 TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAERO-v0t914iHCGtgWZxYnTi8wJRAx1ye4")
 ADMINS = [7952645598, 6526861547]
-SITE_URL = os.getenv("SITE_URL", "http://127.0.0.1:5000")  # публічний https, потрібен для входу через Steam
+SITE_URL = os.getenv("SITE_URL", "https://neondrop-rm5p.onrender.com")
 SECRET = os.getenv("SECRET", "change-me-please")
-STEAM_KEY = os.getenv("STEAM_API_KEY", "")      # для підтягування ніка/аватарки зі Steam
-PAY_CARD = os.getenv("PAY_CARD", "4874100010251687")            # реквізити картки UAH
-PAY_CRYPTO = os.getenv("PAY_CRYPTO", "")        # адреса крипто-гаманця
+STEAM_KEY = os.getenv("STEAM_API_KEY", "")
+PAY_CARD = os.getenv("PAY_CARD", "4874100010251687")
+PAY_CRYPTO = os.getenv("PAY_CRYPTO", "")
 COINS_PER_UAH = float(os.getenv("COINS_PER_UAH", "2.4"))
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "neondrop.db")
 TRADE_RE = re.compile(r"^https://steamcommunity\.com/tradeoffer/new/\?partner=\d+&token=[\w-]+$")
 
-# Вказываем Flask искать index.html и статику в корневой папке проекта
 app = Flask(__name__, template_folder=".", static_folder=".")
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = SECRET
 
 SEED = {
@@ -325,16 +334,6 @@ def withdraw():
     return jsonify(ok=True)
 
 init_db(); load_cat()
-
-def start_bot():
-    try:
-        import bot
-        bot.run_bot()
-    except Exception as e:
-        print(f"Error starting bot: {e}")
-
-# Запускаем бота в отдельном потоке при старте веб-сервера
-threading.Thread(target=start_bot, daemon=True).start()
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))

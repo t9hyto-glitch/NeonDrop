@@ -5,6 +5,7 @@ from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, 
 bot = telebot.TeleBot(TOKEN)
 B = types.InlineKeyboardButton
 
+
 def menu():
     k = types.InlineKeyboardMarkup(row_width=2)
     k.add(B("📊 Статистика", callback_data="st"), B("👥 Гравці", callback_data="us"))
@@ -14,11 +15,14 @@ def menu():
     if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))
     return k
 
+
 def back():
     k = types.InlineKeyboardMarkup(); k.add(B("⬅️ Меню", callback_data="menu")); return k
 
+
 HELP_BAL = "Надішліть: ID суму\n(мінус — забрати)\nНапр.: 12 500 або 12 -300"
 HELP_PROMO = "Надішліть: КОД відсоток [ліміт]\nНапр.: NEON20 20 100 — бонус +20% до поповнення, 100 використань (0 або без ліміту — безліміт)"
+
 
 def do_balance(t):
     try: i, x = (t or "").replace(",", ".").split()[:2]; i = int(i); x = float(x)
@@ -26,12 +30,14 @@ def do_balance(t):
     r = adjust_balance(i, x)
     return f"✅ Гравець ID {i}: {x:+.0f}. Новий баланс: {r:.0f}" if r is not None else "Гравця з таким ID немає"
 
+
 def do_promo(t):
     try:
         p = (t or "").split(); code = p[0].upper(); pct = float(p[1]); mx = int(p[2]) if len(p) > 2 else 0
         assert code.isalnum() and 0 < pct <= 500 and mx >= 0
     except Exception: return HELP_PROMO
     promo_save(code, pct, mx); return f"✅ Промокод {code}: +{pct:g}% до поповнення, ліміт {mx or '∞'}"
+
 
 @bot.message_handler(commands=["give", "promo", "delpromo"], func=lambda m: m.from_user.id in ADMINS)
 def cmds(m):
@@ -41,8 +47,10 @@ def cmds(m):
     else: r = "🗑 Видалено" if promo_del(arg.strip().upper()) else "Такого промокоду немає"
     bot.send_message(m.chat.id, r)
 
+
 def ask(c, text, fn):
     m = bot.send_message(c.message.chat.id, text); bot.register_next_step_handler(m, lambda mm: bot.send_message(mm.chat.id, fn(mm.text)))
+
 
 @bot.message_handler(func=lambda m: True)
 def any_msg(m):
@@ -55,13 +63,18 @@ def any_msg(m):
         else:
             bot.send_message(m.chat.id, "NeonDrop")
 
+
 def edit(c, text, kb):
     bot.edit_message_text(text, c.message.chat.id, c.message.message_id, reply_markup=kb)
+
 
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
     if c.from_user.id not in ADMINS:
         return bot.answer_callback_query(c.id, "Немає доступу", show_alert=True)
+    
+    bot.answer_callback_query(c.id)  # Снимает анимацию ожидания с кнопки Telegram
+    
     d = c.data; con = db()
     if d == "menu":
         edit(c, "🔐 NeonDrop — адмін-панель", menu())
@@ -113,11 +126,9 @@ def cb(c):
     elif d.startswith("wd_ok:"):
         cur = con.execute("UPDATE inv SET status='withdrawn' WHERE id=? AND status='withdraw'", (int(d[6:]),)); con.commit()
         bot.edit_message_text(f"{c.message.text}\n\n{'✅ Виконано' if cur.rowcount else 'Вже оброблено'}", c.message.chat.id, c.message.message_id)
-    con.close(); bot.answer_callback_query(c.id)
+    con.close()
 
-def run_bot():
-    notify("🤖 NeonDrop бот запущено")
-    bot.infinity_polling(skip_pending=True)
 
 if __name__ == "__main__":
-    run_bot()
+    notify("🤖 NeonDrop бот запущено")
+    bot.infinity_polling()
