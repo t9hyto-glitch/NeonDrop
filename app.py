@@ -23,7 +23,7 @@ COINS_PER_UAH = float(os.getenv("COINS_PER_UAH", "2.4"))
 DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "neondrop.db")
 TRADE_RE = re.compile(r"^https://steamcommunity\.com/tradeoffer/new/\?partner=\d+&token=[\w-]+$")
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=".", static_folder=".")
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 app.secret_key = SECRET
 
