@@ -1,5 +1,5 @@
 import os, re, random, sqlite3, requests
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 from flask import Flask, request, session, jsonify, render_template, redirect, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -69,6 +69,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS promos(code TEXT PRIMARY KEY, pct REAL, max_uses INTEGER DEFAULT 0, used INTEGER DEFAULT 0, active INTEGER DEFAULT 1);
     CREATE TABLE IF NOT EXISTS promo_uses(code TEXT, uid INTEGER, UNIQUE(code, uid));
     CREATE TABLE IF NOT EXISTS drops(id INTEGER PRIMARY KEY AUTOINCREMENT, uid INTEGER, item TEXT, case_name TEXT, price INTEGER, show_at DATETIME);
+    CREATE TABLE IF NOT EXISTS images(k TEXT PRIMARY KEY, u TEXT);
     """)
     try: c.execute("ALTER TABLE deposits ADD COLUMN promo TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass
@@ -134,7 +135,7 @@ def spend(uid, amount):
 
 
 def give(uid, item):
-    c = db(); c.execute("INSERT INTO inv(uid,item) VALUES(?,?)", (uid, item)); c.commit(); c.close()
+    c = db(); i = c.execute("INSERT INTO inv(uid,item) VALUES(?,?)", (uid, item)).lastrowid; c.commit(); c.close(); return i
 
 
 def inventory(uid):
@@ -275,6 +276,62 @@ def state():
         cases=[{"id": k, "name": v["name"], "price": v["price"], "n": len(v["items"]), "tier": max((CAT[n][0] for n, w in v["items"]), key=list(WEIGHTS).index)} for k, v in CASES.items()])
 
 
+IMGS = {}  # ключ (назва без зносу/StatTrak/★, нижній регістр) -> URL картинки
+
+
+def img_key(n):
+    n = re.sub(r"\s*\((?:Factory New|Minimal Wear|Field-Tested|Well-Worn|Battle-Scarred)\)\s*$", "", n or "")
+    return n.replace("StatTrak™ ", "").replace("Souvenir ", "").replace("★", "").strip().lower()
+
+
+def load_images():
+    c = db(); IMGS.clear(); IMGS.update({r["k"]: r["u"] for r in c.execute("SELECT k,u FROM images")}); c.close()
+
+
+def fetch_images():  # база картинок скінів CS2 (ByMykel/CSGO-API); викликається при старті, якщо база порожня
+    data = None
+    for url in ("https://raw.githubusercontent.com/ByMykel/CSGO-API/main/public/api/en/skins.json", "https://bymykel.github.io/CSGO-API/api/en/skins.json"):
+        try: data = requests.get(url, timeout=120).json(); break
+        except Exception as e: print("images fetch error:", e)
+    if not data: return 0
+    rows = {img_key(i["name"]): i["image"] for i in (data.values() if isinstance(data, dict) else data) if isinstance(i, dict) and i.get("name") and i.get("image")}
+    c = db(); c.executemany("INSERT OR REPLACE INTO images VALUES(?,?)", list(rows.items())); c.commit(); c.close(); load_images(); return len(rows)
+
+
+@app.route("/img")
+def img():
+    n = request.args.get("n", ""); u = IMGS.get(img_key(n)) or "https://cdn.csgo.com/item/" + quote(n, safe="") + "/300.png"
+    r = redirect(u, 302); r.headers["Cache-Control"] = "public, max-age=86400"; return r
+
+
+@app.route("/api/targets")
+def targets():  # скіни, які можна отримати в апгрейді (шанс 1–90%)
+    try: sp = float(request.args.get("price", 0)); p = float(request.args.get("p", 0))
+    except Exception: return jsonify([])
+    if sp <= 0: return jsonify([])
+    q = (request.args.get("q") or "").lower().split()
+    rows = [(n, v) for n, v in CAT.items() if sp * 95 / 90 <= v[1] <= sp * 95 and all(w in n.lower() for w in q)]
+    if 0 < p <= 90: tp = sp * 95 / p; rows.sort(key=lambda x: abs(x[1][1] - tp))
+    else: rows.sort(key=lambda x: x[1][1])
+    rows = sorted(rows[:40], key=lambda x: x[1][1])
+    return jsonify([{"name": n, "rarity": v[0], "price": v[1], "chance": round(95 * sp / v[1], 2)} for n, v in rows])
+
+
+@app.route("/api/sell", methods=["POST"])
+@need_auth
+def sell():
+    uid = me(); d = request.json or {}; ids = d.get("ids") or [d.get("id")]; total = 0
+    c = db()
+    for i in ids[:300]:
+        r = c.execute("SELECT item FROM inv WHERE id=? AND uid=? AND status='own'", (i, uid)).fetchone()
+        if r and r["item"] in CAT and c.execute("UPDATE inv SET status='sold' WHERE id=? AND status='own'", (i,)).rowcount: total += CAT[r["item"]][1]
+    if total: c.execute("UPDATE users SET balance=balance+? WHERE id=?", (total, uid))
+    c.commit(); c.close()
+    if not total: return jsonify(error="Предмет не знайдено"), 400
+    add_log(uid, "sell", f"+{total}")
+    return jsonify(ok=True, total=total)
+
+
 @app.route("/api/feed")
 def feed():
     c = db(); rows = c.execute("SELECT d.id,d.item,d.price,d.case_name,u.name FROM drops d JOIN users u ON u.id=d.uid WHERE d.show_at<=datetime('now') ORDER BY d.id DESC LIMIT 12").fetchall(); c.close()
@@ -320,33 +377,34 @@ def open_case():
     uid = me(); case = CASES.get((request.json or {}).get("case"))
     if not case: return jsonify(error="Кейс не знайдено"), 400
     if not spend(uid, case["price"]): return jsonify(error="Недостатньо балансу. Поповніть рахунок."), 400
-    win = roll_item(case); give(uid, win)
+    win = roll_item(case); inv_id = give(uid, win)
     if CAT[win][1] >= max(150, case["price"] * 3):  # крутий дроп → у стрічку зліва (з затримкою, щоб не спойлерити анімацію)
         c = db(); c.execute("INSERT INTO drops(uid,item,case_name,price,show_at) VALUES(?,?,?,?,datetime('now','+9 seconds'))", (uid, win, case["name"], CAT[win][1])); c.commit(); c.close()
     strip = [roll_item(case) for _ in range(60)]; strip[50] = win
     add_log(uid, "case", f"{case['name']} -> {win}")
     notify(f"📦 Кейс\n{who(uid)}\n{case['name']} ({case['price']})\nВипало: {win} [{CAT[win][0]}, {CAT[win][1]}]")
-    return jsonify(strip=[{"name": n, "rarity": CAT[n][0], "price": CAT[n][1]} for n in strip], win=50)
+    return jsonify(strip=[{"name": n, "rarity": CAT[n][0], "price": CAT[n][1]} for n in strip], win=50, inv=inv_id)
 
 
 @app.route("/api/upgrade", methods=["POST"])
 @need_auth
 def upgrade():
-    uid = me(); d = request.json or {}
-    try: mult = float(d.get("mult", 0))
-    except Exception: mult = 0
-    if mult not in (1.5, 2.0, 5.0): return jsonify(error="Невірний множник"), 400
+    uid = me(); d = request.json or {}; tgt = d.get("target")
+    if tgt not in CAT: return jsonify(error="Оберіть скін, який хочете отримати"), 400
     c = db(); r = c.execute("SELECT item FROM inv WHERE id=? AND uid=? AND status='own'", (d.get("id"), uid)).fetchone()
     if not r or r["item"] not in CAT: c.close(); return jsonify(error="Предмет не знайдено"), 400
-    c.execute("UPDATE inv SET status='used' WHERE id=?", (d["id"],)); c.commit(); c.close()
-    src = r["item"]; chance = round(95 / mult, 2); roll = random.uniform(0, 100)
+    src = r["item"]; sp, tp = CAT[src][1], CAT[tgt][1]; chance = round(95 * sp / tp, 2)
+    if not 1 <= chance <= 90: c.close(); return jsonify(error="Шанс має бути від 1% до 90%"), 400
+    if not c.execute("UPDATE inv SET status='used' WHERE id=? AND status='own'", (d["id"],)).rowcount: c.close(); return jsonify(error="Предмет не знайдено"), 400
+    c.commit(); c.close()
+    roll = random.uniform(0, 100)
     bonus = random.random() < 0.01; nm = random.choice((2, 3)) if bonus else 1; N = 10 if bonus else 0  # NeonDrop: 1% шанс, неоновий сектор 10% колеса
-    neon = bonus and roll < N; won = neon or N <= roll < N + chance; prize = None
+    neon = bonus and roll < N; won = neon or N <= roll < N + chance; prize = None; inv_id = None
     if won:
-        t = CAT[src][1] * mult * (nm if neon else 1); prize = min(CAT, key=lambda n: abs(CAT[n][1] - t)); give(uid, prize)
-    add_log(uid, "upgrade", f"{src} x{mult}{' NEON x' + str(nm) if bonus else ''} -> {prize or 'програш'}")
-    notify(f"⚡ Апгрейд\n{who(uid)}\n{src} x{mult} (шанс {chance}%){' ⚡NEONDROP x' + str(nm) if bonus else ''}\n{'ВИГРАШ → ' + prize if won else 'Програш'}")
-    return jsonify(won=won, roll=roll, chance=chance, prize=prize, bonus=bonus, neon=neon, nm=nm, N=N, rarity=prize and CAT[prize][0], price=prize and CAT[prize][1])
+        prize = min(CAT, key=lambda n: abs(CAT[n][1] - tp * nm)) if neon else tgt; inv_id = give(uid, prize)
+    add_log(uid, "upgrade", f"{src} -> {tgt} ({chance}%){' NEON x' + str(nm) if bonus else ''}: {prize or 'програш'}")
+    notify(f"⚡ Апгрейд\n{who(uid)}\n{src} → {tgt} (шанс {chance}%){' ⚡NEONDROP x' + str(nm) if bonus else ''}\n{'ВИГРАШ → ' + prize if won else 'Програш'}")
+    return jsonify(won=won, roll=roll, chance=chance, prize=prize, bonus=bonus, neon=neon, nm=nm, N=N, rarity=prize and CAT[prize][0], price=prize and CAT[prize][1], inv=inv_id)
 
 
 @app.route("/api/deposit", methods=["POST"])
@@ -384,6 +442,6 @@ def withdraw():
     return jsonify(ok=True)
 
 
-init_db(); load_cat()
+init_db(); load_cat(); load_images()
 if __name__ == "__main__":
     app.run(port=5000)

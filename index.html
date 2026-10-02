@@ -131,6 +131,17 @@ body{background:transparent}
 .fd .sk{height:60px}.fd b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fd small{display:block;color:var(--mute);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fd em{font-style:normal;font-weight:700;font-size:11px;color:var(--c)}.fe{font-size:11px;color:var(--mute)}
 @media(max-width:1180px){.feed{display:none!important}}@media(min-width:1181px){#app{padding-left:140px}}
 .tos{max-height:300px;overflow:auto;font-size:13px;color:var(--mute);line-height:1.55;padding-right:8px}.tos li{margin-bottom:6px}.btn.go:disabled{opacity:.35;cursor:not-allowed}
+
+.ug{display:grid;grid-template-columns:1fr minmax(300px,380px) 1fr;gap:22px;align-items:center;max-width:1100px;margin:0 auto}
+.us{border-radius:16px;padding:18px 14px;text-align:center;min-height:260px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;border:1.5px solid color-mix(in srgb,var(--c) 55%,#222);background:radial-gradient(circle at 50% 35%,color-mix(in srgb,var(--c) 26%,transparent),#0b0916c0 70%);box-shadow:0 0 40px color-mix(in srgb,var(--c) 25%,transparent)}
+.us small{color:var(--mute);letter-spacing:.08em;text-transform:uppercase;font-size:11px}.us .sk{height:130px;filter:drop-shadow(0 8px 20px var(--c))}.us b{font-size:14px}.us span{font:700 20px var(--fd);color:var(--c)}.us p{color:var(--mute);font-size:13px;max-width:190px}
+.uctl{max-width:620px;margin:24px auto 0;text-align:center}.uctl input[type=range]{width:100%;accent-color:#a855f7;margin:12px 0}.qp{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.utabs{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:32px 0 14px}.utabs input{flex:1;min-width:200px;max-width:340px;margin:0;display:none}
+.utabs .btn.on{background:linear-gradient(90deg,#22d3ee,#a855f7);color:#000;border-color:transparent}
+.upR .btn.go{margin-top:6px}
+@media(max-width:900px){.ug{grid-template-columns:1fr}}
+.promo{display:flex;gap:8px;align-items:center}.promo input{margin:6px 0}.mbox label{display:block;font-size:13px;color:var(--mute)}
+.rb{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px}
 </style>
 </head>
 <body>
@@ -163,9 +174,14 @@ body{background:transparent}
     <div class="chead"><div id="cbig"></div><div><h2 id="ctitle" style="margin-bottom:6px"></h2><small id="cinfo" style="color:var(--mute)"></small><br><br><button class="btn go" id="copen"></button></div></div>
     <div class="roul" id="roul"><div class="strip" id="strip"></div></div>
     <h2 style="font-size:20px;margin:30px 0 12px">Вміст кейса</h2><div class="items" id="citems" style="max-height:none"></div></section>
-  <section class="tab" id="upgrade"><h2>Апгрейдер</h2><div class="up"><div class="upR"><div class="nb" id="nb">NEONDROP</div><div class="wheel" id="wheel"><i class="halo"></i><div class="arrowp" id="arrowp"></div><div class="t"><div id="wimg"></div><b id="wch" style="font-size:30px">—</b><br><small>шанс</small></div></div><div class="mults" id="mults"></div><button class="btn go" onclick="doUpgrade()">Апгрейд</button></div>
-    <div class="upL"><p class="empty">Оберіть скін зі свого інвентарю:</p><div class="grid" id="upGrid"></div></div></div></section>
-  <section class="tab" id="inventory"><h2>Інвентар</h2><div class="grid" id="invGrid"></div></section>
+  <section class="tab" id="upgrade"><h2>Апгрейдер</h2>
+    <div class="ug"><div id="uTarget"></div>
+      <div class="upR"><div class="nb" id="nb">NEONDROP</div><div class="wheel" id="wheel"><i class="halo"></i><div class="arrowp" id="arrowp"></div><div class="t"><div id="wimg"></div><b id="wch" style="font-size:30px">—</b><br><small>шанс</small></div></div><button class="btn go" onclick="doUpgrade()">Апгрейд</button></div>
+      <div id="uStake"></div></div>
+    <div class="uctl"><div>Бажаний шанс: <b id="pctv">50%</b></div><input type="range" id="pct" min="1" max="90" value="50" oninput="onPct(this.value)"><div class="qp"><button class="btn o" onclick="setPct(10)">10%</button><button class="btn o" onclick="setPct(25)">25%</button><button class="btn o" onclick="setPct(50)">50%</button><button class="btn o" onclick="setPct(75)">75%</button><button class="btn o" onclick="setPct(90)">90%</button></div></div>
+    <div class="utabs"><button class="btn o" id="tabInv" onclick="setUpTab('inv')">Мій інвентар</button><button class="btn o" id="tabTgt" onclick="setUpTab('tgt')">Що хочу отримати</button><input type="text" id="usearch" placeholder="Пошук скіна…" oninput="onSearch()"></div>
+    <div class="grid" id="upGrid"></div></section>
+  <section class="tab" id="inventory"><h2>Інвентар</h2><div id="invTools" style="margin:0 0 14px"></div><div class="grid" id="invGrid"></div></section>
   <section class="tab" id="profile"><h2>Профіль</h2><div id="profBox"></div></section>
 </main>
 <div id="toasts"></div>
@@ -191,8 +207,9 @@ function toast(m,t=''){const d=document.createElement('div');d.className='toast 
 async function api(u,b){const r=await fetch(u,b?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}:{});const j=await r.json().catch(()=>({error:'Помилка сервера'}));if(!r.ok){toast(j.error||'Помилка','err');throw j}return j}
 function modal(h,w){closeModal();const m=document.createElement('div');m.className='mask';m.id='modal';m.innerHTML=`<div class="mbox ${w||''}">${h}</div>`;m.onclick=e=>{if(e.target===m)closeModal()};document.body.appendChild(m)}
 function closeModal(){const m=$('modal');if(m)m.remove()}
-const IMG=n=>'https://cdn.csgo.com/item/'+encodeURIComponent(n).replace(/\(/g,'%28').replace(/\)/g,'%29')+'/300.png';
-const sk=n=>`<img class="sk" loading="lazy" alt="" src="${IMG(n)}" onerror="this.style.opacity=0">`;
+const IMG=n=>'/img?n='+encodeURIComponent(n);
+const PH='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 80"><rect x="12" y="28" width="96" height="24" rx="8" fill="#ffffff26"/><rect x="34" y="52" width="16" height="20" rx="4" fill="#ffffff26"/><circle cx="60" cy="40" r="6" fill="#ffffff55"/></svg>');
+const sk=n=>`<img class="sk" loading="lazy" alt="" src="${IMG(n)}" onerror="this.onerror=null;this.src=PH">`;
 const card=(i,x='')=>`<div class="card" style="--c:${col(i.rarity)}">${sk(i.name)}<b>${esc(i.name)}</b><small>${i.rarity}</small><span class="price">${i.price}</span>${x}</div>`;
 const avaHtml=(u,c)=>u.avatar?`<img class="${c}" src="${esc(u.avatar)}">`:`<div class="${c}">${esc(u.name[0])}</div>`;
 const crate=c=>{const k=col(c.tier);return `<svg viewBox="0 0 120 120" width="112" height="112" aria-hidden="true"><defs><linearGradient id="g${c.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${k}"/><stop offset="1" stop-color="#050505"/></linearGradient></defs><polygon points="60,8 106,34 60,60 14,34" fill="${k}"/><polygon points="14,34 60,60 60,114 14,88" fill="url(#g${c.id})"/><polygon points="106,34 60,60 60,114 106,88" fill="${k}" fill-opacity=".38"/><path d="M60 60V114M14 34L60 60L106 34M37 21L83 47M83 21L37 47" stroke="#000" stroke-opacity=".55" stroke-width="2" fill="none"/><circle cx="60" cy="34" r="7" fill="#fff"/></svg>`};
@@ -204,11 +221,9 @@ function render(){
   $('caseGrid').innerHTML=S.cases.map(c=>`<div class="card cc" style="--c:${col(c.tier)}" onclick="showCase('${c.id}')">${crate(c)}<b>${esc(c.name)}</b><small>${c.n} предметів</small><span class="pill">${c.price}</span></div>`).join('');
   $('odds').textContent='Чим дорожчий скін, тим рідше він випадає. Ціна кейса завжди вища за середню вартість предметів усередині. В апгрейдері є шанс 1% на NeonDrop.';
   const inv=S.inventory;
-  $('invGrid').innerHTML=inv.length?inv.map(i=>card(i,`<button class="btn o" onclick="withdraw(${i.id})">Вивести</button>`)).join(''):'<p class="empty">Інвентар порожній. Відкрийте кейс.</p>';
-  if(!inv.find(i=>i.id===selItem))selItem=null;
-  $('upGrid').innerHTML=inv.length?inv.map(i=>`<div onclick="selItem=${i.id};render()" style="cursor:pointer">${card(i).replace('class="card"',`class="card ${i.id===selItem?'sel':''}"`)}</div>`).join(''):'<p class="empty">Немає предметів для апгрейду.</p>';
-  $('mults').innerHTML=[1.5,2,5].map(m=>`<button class="btn ${m===mult?'':'o'}" onclick="mult=${m};render()">x${m}</button>`).join('');
-  const c=+(95/mult).toFixed(2);drawWheel();const si=inv.find(i=>i.id===selItem);$('wimg').innerHTML=si?sk(si.name):'';
+  $('invTools').innerHTML=inv.length?`<button class="btn o" onclick="sellAll()">Продати все · ${inv.reduce((s,i)=>s+i.price,0)}</button>`:'';
+  $('invGrid').innerHTML=inv.length?inv.map(i=>card(i,`<div class="rb"><button class="btn o" onclick="withdraw(${i.id})">Вивести</button><button class="btn" onclick="sellItem(${i.id})">Продати ${i.price}</button></div>`)).join(''):'<p class="empty">Інвентар порожній. Відкрийте кейс.</p>';
+  renderUp(inv);
   const un=(S.notes||[]).filter(n=>!n.read).length;$('badge').textContent=un;$('badge').style.display=un?'inline-block':'none';
   renderProfile()}
 function renderProfile(){
@@ -236,7 +251,7 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>showTab(b.data
 
 let bonusUI=null,cur=null;
 const cell=i=>`<div class="cell" style="--c:${col(i.rarity)}">${sk(i.name)}<span>${esc(i.name.split(' | ').pop())}</span></div>`;
-function reveal(it,t,neon){modal(`<div class="rev" style="--c:${neon?'#ff2bd6':col(it.rarity)}"><small>${t}</small>${sk(it.name)}<h2>${esc(it.name)}</h2><small>${it.rarity}</small><p class="price">${it.price}</p><button class="btn go" onclick="closeModal()">Супер!</button></div>`)}
+function reveal(it,t,neon){modal(`<div class="rev" style="--c:${neon?'#ff2bd6':col(it.rarity)}"><small>${t}</small>${sk(it.name)}<h2>${esc(it.name)}</h2><small>${it.rarity}</small><p class="price">${it.price}</p><div class="rb">${it.inv?`<button class="btn go" style="min-width:0" onclick="sellItem(${it.inv})">Продати за ${it.price}</button><button class="btn o" onclick="closeModal()">Забрати</button>`:`<button class="btn go" onclick="closeModal()">Супер!</button>`}</div></div>`)}
 async function showCase(id){try{const r=await api('/api/case/'+id),c=S.cases.find(x=>x.id===id);cur=id;
   $('cbig').innerHTML=crate(c);$('ctitle').textContent=r.name;$('cinfo').textContent=r.items.length+' предметів · чим дорожчий скін, тим менший шанс';
   $('copen').textContent='Відкрити за '+r.price;$('copen').onclick=()=>openCase(id);
@@ -249,18 +264,45 @@ async function openCase(id){if(busy)return;busy=true;$('copen').disabled=true;tr
   const w=$('roul').clientWidth;st.offsetWidth;st.style.transition='transform 7s cubic-bezier(.08,.6,.08,1)';st.style.transform=`translateX(-${r.win*140+70-w/2+(Math.random()*80-40)}px)`;
   for(let i=1;i<=40;i++)setTimeout(()=>snd('tick'),7000*(1-Math.pow(1-i/40,2.2)));
   await new Promise(z=>setTimeout(z,7200));const it=r.strip[r.win];$('roul').classList.add('done');st.children[r.win].classList.add('win');dropSnd(it.rarity);
-  await new Promise(z=>setTimeout(z,700));reveal(it,'Випало',false)}catch(e){if(e.code==='auth')loginGo()&&(location.href='/login')}busy=false;$('copen').disabled=false;load()}
+  await new Promise(z=>setTimeout(z,700));reveal({...it,inv:r.inv},'Випало',false)}catch(e){if(e.code==='auth')loginGo()&&(location.href='/login')}busy=false;$('copen').disabled=false;load()}
 async function withdraw(id){try{await api('/api/withdraw',{id});toast('Запит на вивід надіслано','ok');load()}catch(e){if(e.code==='trade'){showTab('profile');setTimeout(()=>$('ptrade')&&$('ptrade').focus(),100)}}}
-function drawWheel(){const c=+(95/mult).toFixed(2),b=bonusUI,N=b?b.N:0;
+let upStake=null,upTgt=null,upPct=50,upTab_='inv',upList=[],upT=null,upDrag=false;
+const upChance=()=>+(95*upStake.price/upTgt.price).toFixed(2);
+const wheelChance=()=>upDrag||!(upStake&&upTgt)?+upPct:upChance();
+const uside=(t,i,e)=>`<div class="us" style="--c:${i?col(i.rarity):'#555'}"><small>${t}</small>${i?`${sk(i.name)}<b>${esc(i.name)}</b><span>${i.price}</span>`:`<p>${e}</p>`}</div>`;
+function renderUp(inv){
+  if(upStake&&!inv.find(i=>i.id===upStake.id)){upStake=null;upTgt=null;upList=[]}
+  const ok=upStake&&upTgt;
+  $('uStake').innerHTML=uside('Ваша ставка',upStake,'Оберіть свій скін нижче');
+  $('uTarget').innerHTML=uside(ok?`Ви отримаєте · x${(upTgt.price/upStake.price).toFixed(2)}`:'Ви отримаєте',upTgt,'Оберіть бажаний шанс або скін');
+  $('wimg').innerHTML=upTgt?sk(upTgt.name):'';drawWheel();
+  $('pct').value=ok?Math.round(upChance()):upPct;$('pctv').textContent=wheelChance()+'%';
+  $('tabInv').classList.toggle('on',upTab_==='inv');$('tabTgt').classList.toggle('on',upTab_==='tgt');$('usearch').style.display=upTab_==='tgt'?'block':'none';
+  $('upGrid').innerHTML=upTab_==='inv'
+    ?(inv.length?inv.map(i=>`<div onclick="pickStake(${i.id})" style="cursor:pointer">${card(i).replace('class="card"',`class="card ${upStake&&i.id===upStake.id?'sel':''}"`)}</div>`).join(''):'<p class="empty">Немає предметів для апгрейду.</p>')
+    :(!upStake?'<p class="empty">Спочатку оберіть свій скін у вкладці «Мій інвентар».</p>':upList.length?upList.map((i,n)=>`<div onclick="pickTarget(${n})" style="cursor:pointer">${card(i,`<small>шанс ${i.chance}%</small>`).replace('class="card"',`class="card ${upTgt&&i.name===upTgt.name?'sel':''}"`)}</div>`).join(''):'<p class="empty">Нічого не знайдено.</p>')}
+function pickStake(id){upStake=S.inventory.find(i=>i.id===id)||null;upTgt=null;upList=[];$('usearch').value='';upTab_='tgt';if(upStake)loadTargets(true);else renderUp(S.inventory)}
+function pickTarget(n){upTgt=upList[n];upPct=Math.round(upTgt.chance);renderUp(S.inventory);$('wheel').scrollIntoView({behavior:'smooth',block:'center'})}
+async function loadTargets(auto){if(!upStake)return;const q=$('usearch').value.trim();
+  try{upList=await fetch(`/api/targets?price=${upStake.price}&p=${upPct}&q=${encodeURIComponent(q)}`).then(x=>x.json());
+    if(auto)upTgt=upList.length?upList.reduce((a,b)=>Math.abs(b.chance-upPct)<Math.abs(a.chance-upPct)?b:a):null}catch(e){}
+  upDrag=false;renderUp(S.inventory)}
+function onPct(v){upPct=+v;upDrag=!!upStake;$('pctv').textContent=v+'%';drawWheel();clearTimeout(upT);if(upStake)upT=setTimeout(()=>{$('usearch').value='';loadTargets(true)},220)}
+function setPct(v){$('pct').value=v;onPct(v)}
+function onSearch(){clearTimeout(upT);upT=setTimeout(()=>loadTargets(false),300)}
+function setUpTab(t){upTab_=t;if(t==='tgt'&&upStake&&!upList.length)loadTargets(false);else renderUp(S.inventory)}
+async function sellItem(id){try{const r=await api('/api/sell',{id});closeModal();toast('Продано · +'+r.total+' монет','ok');snd('good');load()}catch(e){}}
+async function sellAll(){const ids=S.inventory.map(i=>i.id);if(!ids.length||!confirm('Продати всі предмети ('+ids.length+')?'))return;try{const r=await api('/api/sell',{ids});toast('Продано · +'+r.total+' монет','ok');snd('good');load()}catch(e){}}
+function drawWheel(){const c=wheelChance(),b=bonusUI,N=b?b.N:0;
   $('wheel').style.background=b?`conic-gradient(#ff2bd6 0,#ffe600 ${N/2}%,#00f0ff ${N}%,#22d3ee ${N}%,#a855f7 ${N+c}%,#1b1830 ${N+c}% 100%)`:`conic-gradient(#22d3ee 0,#a855f7 ${c}%,#1b1830 ${c}% 100%)`;
   $('wch').textContent=b?'NEON x'+b.nm:c+'%'}
-async function doUpgrade(){if(busy)return;if(!selItem)return toast('Оберіть скін для апгрейду','err');busy=true;try{
-  const r=await api('/api/upgrade',{id:selItem,mult}),w=$('wheel'),a=$('arrowp');a.style.transition='none';a.style.transform='rotate(0deg)';a.offsetWidth;
+async function doUpgrade(){if(busy)return;if(!upStake||!upTgt)return toast('Оберіть свій скін і бажаний приз','err');busy=true;try{
+  const r=await api('/api/upgrade',{id:upStake.id,target:upTgt.name}),w=$('wheel'),a=$('arrowp');a.style.transition='none';a.style.transform='rotate(0deg)';a.offsetWidth;
   if(r.bonus){bonusUI={N:r.N,nm:r.nm};drawWheel();w.classList.add('neon');$('nb').classList.add('on');snd('neonSpawn');toast(`⚡ NeonDrop! Влучи в неон — приз x${r.nm}`,'ok');await new Promise(z=>setTimeout(z,2400))}
   a.style.transition='';a.style.transform=`rotate(${2160+r.roll*3.6}deg)`;
   for(let i=1;i<=36;i++)setTimeout(()=>snd('tick'),5500*(1-Math.pow(1-i/36,2.2)));
   await new Promise(z=>setTimeout(z,5800));
-  if(r.won){snd(r.neon?'neonWin':'good');reveal({name:r.prize,rarity:r.rarity,price:r.price},r.neon?'NEONDROP x'+r.nm:'Успіх!',r.neon)}else{snd('lose');toast('Апгрейд не вдався, предмет втрачено','err')}selItem=null}catch(e){}
+  if(r.won){snd(r.neon?'neonWin':'good');reveal({name:r.prize,rarity:r.rarity,price:r.price,inv:r.inv},r.neon?'NEONDROP x'+r.nm:'Успіх!',r.neon)}else{snd('lose');toast('Апгрейд не вдався, предмет втрачено','err')}upStake=null;upTgt=null;upList=[]}catch(e){}
   bonusUI=null;$('wheel').classList.remove('neon');$('nb').classList.remove('on');busy=false;load()}
 
 function loginGo(){if(document.cookie.includes('tos=1'))return true;tos();return false}
@@ -286,7 +328,7 @@ async function feedLoad(){try{const r=await fetch('/api/feed').then(x=>x.json())
 setInterval(feedLoad,5000);feedLoad();
 function openDeposit(){modal(`<h2 style="font-size:20px">Поповнення</h2><br><div class="opt"><button class="btn o" id="mc" disabled>Криптовалюта · скоро</button><button class="btn" id="mk">Картка UAH</button></div>
   <label>Сума в UAH (50–50 000)</label><input type="number" id="amt" value="500" min="50">
-  <label>Промокод (необов’язково)</label><input id="pcode" placeholder="NEON20" style="text-transform:uppercase" onchange="checkPromo()"><p id="pinfo" style="color:var(--mute);font-size:13px;min-height:18px"></p><button class="btn" style="width:100%" onclick="sendDep()">Продовжити</button>`)}
+  <label>Промокод (необов’язково)</label><div class="promo"><input type="text" id="pcode" placeholder="NEON20" style="text-transform:uppercase" onchange="checkPromo()"><button class="btn o" onclick="checkPromo()">Застосувати</button></div><p id="pinfo" style="color:var(--mute);font-size:13px;min-height:18px"></p><button class="btn" style="width:100%" onclick="sendDep()">Продовжити</button>`)}
 async function checkPromo(){const v=$('pcode').value.trim();if(!v){$('pinfo').textContent='';return}try{const r=await api('/api/promo',{code:v});$('pinfo').innerHTML=`✅ Бонус <b>+${r.pct}%</b> до поповнення`}catch(e){$('pinfo').textContent=''}}
 async function sendDep(){try{const r=await api('/api/deposit',{method:'card',amount:+$('amt').value,promo:$('pcode').value});
   modal(`<h2 style="font-size:20px">Заявка #${r.id}</h2><br><p>Переказ на картку (UAH):</p><div class="req">${esc(r.requisites)}</div><p>Після оплати адміністратор підтвердить заявку, і на баланс зарахується <b>${r.coins}</b> монет${r.pct?` (з бонусом +${r.pct}%)`:''}. Ви отримаєте сповіщення в профілі.</p><br><button class="btn" onclick="closeModal()">Готово</button>`);toast('Заявку створено','ok')}catch(e){if(e.code==='auth')loginGo()&&(location.href='/login')}}
