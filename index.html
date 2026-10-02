@@ -214,7 +214,7 @@ const card=(i,x='')=>`<div class="card" style="--c:${col(i.rarity)}">${sk(i.name
 const avaHtml=(u,c)=>u.avatar?`<img class="${c}" src="${esc(u.avatar)}">`:`<div class="${c}">${esc(u.name[0])}</div>`;
 const crate=c=>{const k=col(c.tier);return `<svg viewBox="0 0 120 120" width="112" height="112" aria-hidden="true"><defs><linearGradient id="g${c.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${k}"/><stop offset="1" stop-color="#050505"/></linearGradient></defs><polygon points="60,8 106,34 60,60 14,34" fill="${k}"/><polygon points="14,34 60,60 60,114 14,88" fill="url(#g${c.id})"/><polygon points="106,34 60,60 60,114 106,88" fill="${k}" fill-opacity=".38"/><path d="M60 60V114M14 34L60 60L106 34M37 21L83 47M83 21L37 47" stroke="#000" stroke-opacity=".55" stroke-width="2" fill="none"/><circle cx="60" cy="34" r="7" fill="#fff"/></svg>`};
 
-async function load(){S=await api('/api/state');render();(S.notes||[]).forEach(n=>{if(!n.read&&!shown.has(n.id)){shown.add(n.id);toast(n.text,'ok');snd('good')}})}
+async function load(){let s;try{const r=await fetch('/api/state');if(!r.ok)throw 0;s=await r.json()}catch(e){if(!S.cases)setTimeout(load,3000);return}S=s;render();(S.notes||[]).forEach(n=>{if(!n.read&&!shown.has(n.id)){shown.add(n.id);toast(n.text,'ok');snd('good')}})}
 function render(){
   const u=S.me;
   $('me').innerHTML=`<button class="btn o" onclick="muted=!muted;localStorage.setItem('mute',muted?1:0);render()" title="Звук">${muted?'🔇':'🔊'}</button>`+(u?`${avaHtml(u,'ava')}<span>${esc(u.name)}</span><b>${Math.round(u.balance)}</b><button class="btn" onclick="openDeposit()">Поповнити</button>`:`<a class="btn" href="/login" onclick="return loginGo()">Увійти через Steam</a>`);

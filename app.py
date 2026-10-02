@@ -79,9 +79,8 @@ def init_db():
 
 
 def load_cat():
-    c = db(); CAT.clear()
-    CAT.update({r["name"]: (r["rarity"], r["price"]) for r in c.execute("SELECT * FROM skins")}); c.close()
-    CASES.clear()
+    c = db(); cat = {r["name"]: (r["rarity"], r["price"]) for r in c.execute("SELECT * FROM skins")}; c.close()
+    CAT.clear(); CAT.update(cat); new_cases = {}  # кейси збираємо окремо й підміняємо разом — сайт не ламається під час перезавантаження каталогу
     for cid, name, price, kw in CASE_DEFS:
         band = lambda f: sorted((n for n, (r, p) in CAT.items() if price * .1 <= p <= price * 40 and f(n)), key=lambda n: CAT[n][1])
         names = band(lambda n: not kw or any(k in n for k in kw))
@@ -95,7 +94,8 @@ def load_cat():
             if ev(mid) > target: lo = mid
             else: hi = mid
         w = [p ** -hi for p in ps]; s = sum(w)
-        CASES[cid] = {"name": name, "price": price, "items": [(n, q / s) for n, q in zip(names, w)]}
+        new_cases[cid] = {"name": name, "price": price, "items": [(n, q / s) for n, q in zip(names, w)]}
+    CASES.clear(); CASES.update(new_cases)
 
 
 def notify(text, kb=None):
@@ -286,7 +286,7 @@ def state():
     return jsonify(
         me=u and {"id": uid, "name": u["name"], "avatar": u["avatar"], "steamid": u["steamid"], "trade_url": u["trade_url"], "balance": u["balance"]},
         inventory=inventory(uid) if u else [], odds=WEIGHTS, notes=notes_of(uid) if u else [], stats=withdraw_stats(uid) if u else None,
-        cases=[{"id": k, "name": v["name"], "price": v["price"], "n": len(v["items"]), "tier": max((CAT[n][0] for n, w in v["items"]), key=list(WEIGHTS).index)} for k, v in CASES.items()])
+        cases=[{"id": k, "name": v["name"], "price": v["price"], "n": len(v["items"]), "tier": max((CAT.get(n, ("Mil-Spec", 0))[0] for n, w in v["items"]), key=list(WEIGHTS).index)} for k, v in list(CASES.items())])
 
 
 IMGS = {}  # ключ (назва без зносу/StatTrak/★, нижній регістр) -> URL картинки
