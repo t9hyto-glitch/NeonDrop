@@ -6,12 +6,12 @@ from urllib.parse import urlencode
 from flask import Flask, request, session, jsonify, redirect, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# Гарантированный запуск бота в отдельном процессе
+# Автозапуск бота на Render без циклического импорта
 if "bot.py" not in sys.argv[0] and not os.environ.get("BOT_SPAWNED"):
     os.environ["BOT_SPAWNED"] = "1"
     subprocess.Popen([sys.executable, "bot.py"])
 
-# ---------- Конфиг ----------
+# ---------- Конфіг ----------
 TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAERO-v0t914iHCGtgWZxYnTi8wJRAx1ye4")
 ADMINS = [7952645598, 6526861547]
 SITE_URL = os.getenv("SITE_URL", "https://neondrop-rm5p.onrender.com")
@@ -53,13 +53,16 @@ CASE_DEFS = [
     ("butterfly", "Butterfly Effect", 15000, ["Butterfly", "Bayonet", "Flip"]),
     ("elite", "Elite Vault", 15000, []),
 ]
+QUOTA = {"Mil-Spec": 12, "Restricted": 8, "Classified": 5, "Covert": 3, "Rare Special": 2}
 CAT, CASES = {}, {}
+
 
 def db():
     c = sqlite3.connect(DB, timeout=15)
     c.row_factory = sqlite3.Row
     c.execute("PRAGMA journal_mode=WAL;")
     return c
+
 
 def init_db():
     c = db()
@@ -80,6 +83,7 @@ def init_db():
         c.executemany("INSERT INTO skins VALUES(?,?,?)", [(n, r, p) for r, l in SEED.items() for n, p in l])
     c.commit(); c.close()
 
+
 def load_cat():
     c = db(); CAT.clear()
     CAT.update({r["name"]: (r["rarity"], r["price"]) for r in c.execute("SELECT * FROM skins")}); c.close()
@@ -99,6 +103,7 @@ def load_cat():
         w = [p ** -hi for p in ps]; s = sum(w)
         CASES[cid] = {"name": name, "price": price, "items": [(n, q / s) for n, q in zip(names, w)]}
 
+
 def notify(text, kb=None):
     for a in ADMINS:
         try:
@@ -108,37 +113,47 @@ def notify(text, kb=None):
         except Exception:
             pass
 
+
 def user(uid):
     c = db(); r = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone(); c.close(); return r
+
 
 def who(uid):
     u = user(uid); return f"{u['name']} (ID {uid})" if u else str(uid)
 
+
 def add_log(uid, kind, info):
     c = db(); c.execute("INSERT INTO log(uid,kind,info) VALUES(?,?,?)", (uid, kind, info)); c.commit(); c.close()
 
+
 def add_note(uid, text):
     c = db(); c.execute("INSERT INTO notes(uid,text) VALUES(?,?)", (uid, text)); c.commit(); c.close()
+
 
 def notes_of(uid):
     c = db(); rows = c.execute("SELECT id,text,read,ts FROM notes WHERE uid=? ORDER BY id DESC LIMIT 20", (uid,)).fetchall(); c.close()
     return [{"id": r["id"], "text": r["text"], "read": bool(r["read"]), "ts": r["ts"][:16]} for r in rows]
 
+
 def spend(uid, amount):
     c = db(); cur = c.execute("UPDATE users SET balance=balance-? WHERE id=? AND balance>=?", (amount, uid, amount)); c.commit(); c.close()
     return cur.rowcount == 1
 
+
 def give(uid, item):
     c = db(); c.execute("INSERT INTO inv(uid,item) VALUES(?,?)", (uid, item)); c.commit(); c.close()
+
 
 def inventory(uid):
     c = db(); rows = c.execute("SELECT id,item FROM inv WHERE uid=? AND status='own' ORDER BY id DESC", (uid,)).fetchall(); c.close()
     return [{"id": r["id"], "name": r["item"], "rarity": CAT[r["item"]][0], "price": CAT[r["item"]][1]} for r in rows if r["item"] in CAT]
 
+
 def withdraw_stats(uid):
     c = db(); rows = c.execute("SELECT item,status FROM inv WHERE uid=? AND status IN ('withdraw','withdrawn')", (uid,)).fetchall(); c.close()
     done = [CAT[r["item"]][1] for r in rows if r["status"] == "withdrawn" and r["item"] in CAT]
     return {"n": len(done), "sum": sum(done), "pending": sum(r["status"] == "withdraw" for r in rows)}
+
 
 def promo_get(code, uid=None):
     code = (code or "").strip().upper()
@@ -150,20 +165,25 @@ def promo_get(code, uid=None):
     if used: return 0, "Ви вже використовували цей промокод"
     return p["pct"], None
 
+
 def release_promo(did):
     c = db(); d = c.execute("SELECT uid,promo FROM deposits WHERE id=?", (did,)).fetchone()
     if d and d["promo"] and c.execute("DELETE FROM promo_uses WHERE code=? AND uid=?", (d["promo"], d["uid"])).rowcount:
         c.execute("UPDATE promos SET used=MAX(0,used-1) WHERE code=?", (d["promo"],))
     c.commit(); c.close()
 
+
 def promo_save(code, pct, max_uses=0):
     c = db(); c.execute("INSERT INTO promos(code,pct,max_uses) VALUES(?,?,?) ON CONFLICT(code) DO UPDATE SET pct=excluded.pct,max_uses=excluded.max_uses,active=1", (code, pct, max_uses)); c.commit(); c.close()
+
 
 def promo_del(code):
     c = db(); n = c.execute("UPDATE promos SET active=0 WHERE code=? AND active=1", (code,)).rowcount; c.commit(); c.close(); return n
 
+
 def promos_list():
     c = db(); rows = c.execute("SELECT code,pct,max_uses,used FROM promos WHERE active=1 ORDER BY code").fetchall(); c.close(); return rows
+
 
 def adjust_balance(uid, amount):
     c = db(); n = c.execute("UPDATE users SET balance=MAX(0,balance+?) WHERE id=?", (amount, uid)).rowcount; c.commit()
@@ -171,6 +191,7 @@ def adjust_balance(uid, amount):
     if not n: return None
     add_log(uid, "admin", f"{amount:+.0f}"); add_note(uid, f"Адміністратор {'нарахував' if amount > 0 else 'списав'} {abs(amount):.0f} монет")
     return r["balance"]
+
 
 def confirm_deposit(did):
     c = db(); d = c.execute("SELECT * FROM deposits WHERE id=? AND status='pending'", (did,)).fetchone()
@@ -181,10 +202,13 @@ def confirm_deposit(did):
     add_note(d["uid"], f"Ваш платіж підтверджено, гроші зараховано: +{d['coins']:.0f} монет")
     return d
 
+
 def roll_item(case):
     return random.choices([n for n, w in case["items"]], [w for n, w in case["items"]])[0]
 
+
 def me(): return session.get("uid")
+
 
 def need_auth(f):
     def w(*a, **k):
@@ -193,10 +217,12 @@ def need_auth(f):
     w.__name__ = f.__name__
     return w
 
-# Отдаем index.html напрямую как статический файл (без парсинга Jinja2)
+
+# Отдача файла напрямую (без Jinja2)
 @app.route("/")
 def index():
     return send_from_directory(".", "index.html")
+
 
 @app.route("/login")
 def login():
@@ -206,6 +232,7 @@ def login():
          "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
          "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select"}
     return redirect("https://steamcommunity.com/openid/login?" + urlencode(p))
+
 
 @app.route("/auth/steam")
 def auth_steam():
@@ -224,8 +251,10 @@ def auth_steam():
         session["uid"] = c.execute("SELECT id FROM users WHERE steamid=?", (sid,)).fetchone()["id"]; c.close()
     return redirect("/")
 
+
 @app.route("/logout")
 def logout(): session.clear(); return redirect("/")
+
 
 @app.route("/api/state")
 def state():
@@ -235,16 +264,19 @@ def state():
         inventory=inventory(uid) if u else [], odds=WEIGHTS, notes=notes_of(uid) if u else [], stats=withdraw_stats(uid) if u else None,
         cases=[{"id": k, "name": v["name"], "price": v["price"], "n": len(v["items"]), "tier": max((CAT[n][0] for n, w in v["items"]), key=list(WEIGHTS).index)} for k, v in CASES.items()])
 
+
 @app.route("/api/feed")
 def feed():
     c = db(); rows = c.execute("SELECT d.id,d.item,d.price,d.case_name,u.name FROM drops d JOIN users u ON u.id=d.uid WHERE d.show_at<=datetime('now') ORDER BY d.id DESC LIMIT 12").fetchall(); c.close()
     return jsonify([{"id": r["id"], "name": r["item"], "rarity": CAT[r["item"]][0], "price": r["price"], "case": r["case_name"], "nick": r["name"]} for r in rows if r["item"] in CAT])
+
 
 @app.route("/api/promo", methods=["POST"])
 @need_auth
 def promo_check():
     pct, err = promo_get((request.json or {}).get("code"), me())
     return (jsonify(error=err), 400) if err else jsonify(pct=pct)
+
 
 @app.route("/api/profile", methods=["POST"])
 @need_auth
@@ -257,17 +289,20 @@ def profile():
     c.commit(); c.close()
     return jsonify(ok=True)
 
+
 @app.route("/api/case/<cid>")
 def case_info(cid):
     c = CASES.get(cid)
     if not c: return jsonify(error="Кейс не знайдено"), 404
     return jsonify(name=c["name"], price=c["price"], items=[{"name": n, "rarity": CAT[n][0], "price": CAT[n][1], "chance": round(w * 100, 3)} for n, w in sorted(c["items"], key=lambda x: -CAT[x[0]][1])])
 
+
 @app.route("/api/notes/read", methods=["POST"])
 @need_auth
 def notes_read():
     c = db(); c.execute("UPDATE notes SET read=1 WHERE uid=?", (me(),)); c.commit(); c.close()
     return jsonify(ok=True)
+
 
 @app.route("/api/open", methods=["POST"])
 @need_auth
@@ -282,6 +317,7 @@ def open_case():
     add_log(uid, "case", f"{case['name']} -> {win}")
     notify(f"📦 Кейс\n{who(uid)}\n{case['name']} ({case['price']})\nВипало: {win} [{CAT[win][0]}, {CAT[win][1]}]")
     return jsonify(strip=[{"name": n, "rarity": CAT[n][0], "price": CAT[n][1]} for n in strip], win=50)
+
 
 @app.route("/api/upgrade", methods=["POST"])
 @need_auth
@@ -301,6 +337,7 @@ def upgrade():
     add_log(uid, "upgrade", f"{src} x{mult}{' NEON x' + str(nm) if bonus else ''} -> {prize or 'програш'}")
     notify(f"⚡ Апгрейд\n{who(uid)}\n{src} x{mult} (шанс {chance}%){' ⚡NEONDROP x' + str(nm) if bonus else ''}\n{'ВИГРАШ → ' + prize if won else 'Програш'}")
     return jsonify(won=won, roll=roll, chance=chance, prize=prize, bonus=bonus, neon=neon, nm=nm, N=N, rarity=prize and CAT[prize][0], price=prize and CAT[prize][1])
+
 
 @app.route("/api/deposit", methods=["POST"])
 @need_auth
@@ -322,6 +359,7 @@ def deposit():
            [[{"text": "✅ Підтвердити", "callback_data": f"dep_ok:{did}"}, {"text": "❌ Відхилити", "callback_data": f"dep_no:{did}"}]])
     return jsonify(id=did, requisites=req, coins=coins, pct=pct)
 
+
 @app.route("/api/withdraw", methods=["POST"])
 @need_auth
 def withdraw():
@@ -334,6 +372,7 @@ def withdraw():
     notify(f"📤 ЗАПИТ НА ВИВІД #{iid}\nID гравця на сайті: {uid}\nНік: {u['name']}\nSteam: https://steamcommunity.com/profiles/{u['steamid']}\nТрейд: {u['trade_url']}\nПредмет: {n} [{CAT[n][0]}, {CAT[n][1]}]",
            [[{"text": "✅ Виконано", "callback_data": f"wd_ok:{iid}"}]])
     return jsonify(ok=True)
+
 
 init_db(); load_cat()
 
