@@ -123,9 +123,18 @@ body{background:transparent}
 .halo{position:absolute;inset:-16px;border-radius:50%;background:conic-gradient(#22d3ee,#a855f7,#ec4899,#22d3ee);filter:blur(16px);opacity:.6;animation:spin 9s linear infinite;z-index:-1}
 .wheel.neon{animation:npulse .9s ease-in-out infinite alternate}.wheel.neon .halo{background:conic-gradient(#ff2bd6,#ffe600,#00f0ff,#ff2bd6);opacity:.95;animation-duration:2s}
 .nb{display:none;font:700 24px var(--fd);letter-spacing:.25em;background:linear-gradient(90deg,#ff2bd6,#ffe600,#00f0ff);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:12px;animation:pop .5s}.nb.on{display:block}
+
+@keyframes feedIn{from{max-height:0;opacity:0;transform:translateY(-30px) scale(.8)}to{max-height:190px}}
+.feed{position:fixed;left:0;top:84px;bottom:0;width:132px;z-index:6;padding:8px;background:linear-gradient(90deg,#05030ae6,#05030a66);border-right:1px solid #ffffff14;overflow:hidden;-webkit-mask-image:linear-gradient(#000 75%,transparent);mask-image:linear-gradient(#000 75%,transparent)}
+.feed h4{margin:0 0 8px;font:700 11px var(--fd);letter-spacing:.2em;color:#ff2bd6;text-shadow:0 0 10px #ff2bd6}.feed h4::before{content:"●";margin-right:6px;animation:npulse .8s infinite alternate;box-shadow:none}
+.fd{max-height:190px;overflow:hidden;margin-bottom:8px;padding:6px 4px;border-radius:10px;text-align:center;border:1px solid color-mix(in srgb,var(--c) 55%,#111);background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--c) 28%,transparent),#0b0916);animation:feedIn .7s ease-out}
+.fd .sk{height:60px}.fd b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fd small{display:block;color:var(--mute);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fd em{font-style:normal;font-weight:700;font-size:11px;color:var(--c)}.fe{font-size:11px;color:var(--mute)}
+@media(max-width:1180px){.feed{display:none!important}}@media(min-width:1181px){#app{padding-left:140px}}
+.tos{max-height:300px;overflow:auto;font-size:13px;color:var(--mute);line-height:1.55;padding-right:8px}.tos li{margin-bottom:6px}.btn.go:disabled{opacity:.35;cursor:not-allowed}
 </style>
 </head>
 <body>
+<aside class="feed" id="feed"><h4>LIVE DROP</h4><div id="feedList"><p class="fe">Тут з’являтимуться круті дропи гравців</p></div></aside>
 <header class="top">
   <a href="#" class="logo" onclick="window.scrollTo({top:0,behavior:'smooth'});return false"><i></i><b>Neon</b><span>Drop</span></a>
   <nav id="nav"><button data-t="home">Головна</button><button data-t="cases">Кейси</button><button data-t="upgrade">Апгрейдер</button><button data-t="inventory">Інвентар</button><button data-t="profile">Профіль <span id="badge" class="badge"></span></button></nav>
@@ -191,7 +200,7 @@ const crate=c=>{const k=col(c.tier);return `<svg viewBox="0 0 120 120" width="11
 async function load(){S=await api('/api/state');render();(S.notes||[]).forEach(n=>{if(!n.read&&!shown.has(n.id)){shown.add(n.id);toast(n.text,'ok');snd('good')}})}
 function render(){
   const u=S.me;
-  $('me').innerHTML=`<button class="btn o" onclick="muted=!muted;localStorage.setItem('mute',muted?1:0);render()" title="Звук">${muted?'🔇':'🔊'}</button>`+(u?`${avaHtml(u,'ava')}<span>${esc(u.name)}</span><b>${Math.round(u.balance)}</b><button class="btn" onclick="openDeposit()">Поповнити</button>`:`<a class="btn" href="/login">Увійти через Steam</a>`);
+  $('me').innerHTML=`<button class="btn o" onclick="muted=!muted;localStorage.setItem('mute',muted?1:0);render()" title="Звук">${muted?'🔇':'🔊'}</button>`+(u?`${avaHtml(u,'ava')}<span>${esc(u.name)}</span><b>${Math.round(u.balance)}</b><button class="btn" onclick="openDeposit()">Поповнити</button>`:`<a class="btn" href="/login" onclick="return loginGo()">Увійти через Steam</a>`);
   $('caseGrid').innerHTML=S.cases.map(c=>`<div class="card cc" style="--c:${col(c.tier)}" onclick="showCase('${c.id}')">${crate(c)}<b>${esc(c.name)}</b><small>${c.n} предметів</small><span class="pill">${c.price}</span></div>`).join('');
   $('odds').textContent='Чим дорожчий скін, тим рідше він випадає. Ціна кейса завжди вища за середню вартість предметів усередині. В апгрейдері є шанс 1% на NeonDrop.';
   const inv=S.inventory;
@@ -219,7 +228,7 @@ async function saveProfile(){try{await api('/api/profile',{name:$('pname').value
 function showTab(t){
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x.id===t));
   document.querySelectorAll('#nav button').forEach(x=>x.classList.toggle('on',x.dataset.t===(t==='casepage'?'cases':t)));
-  $('hero').style.display=t==='home'?'block':'none';$('app').style.display=t==='home'?'none':'block';$('bg').style.display=t==='home'?'none':'block';
+  $('hero').style.display=t==='home'?'block':'none';$('app').style.display=t==='home'?'none':'block';$('bg').style.display=t==='home'?'none':'block';$('feed').style.display=t==='home'?'none':'block';
   history.replaceState(null,'','#'+t);window.scrollTo(0,0);
   if(t==='home')window.dispatchEvent(new Event('resize'));
   if(t==='profile'&&(S.notes||[]).some(n=>!n.read))api('/api/notes/read',{}).then(()=>setTimeout(load,2500)).catch(()=>{})}
@@ -240,7 +249,7 @@ async function openCase(id){if(busy)return;busy=true;$('copen').disabled=true;tr
   const w=$('roul').clientWidth;st.offsetWidth;st.style.transition='transform 7s cubic-bezier(.08,.6,.08,1)';st.style.transform=`translateX(-${r.win*140+70-w/2+(Math.random()*80-40)}px)`;
   for(let i=1;i<=40;i++)setTimeout(()=>snd('tick'),7000*(1-Math.pow(1-i/40,2.2)));
   await new Promise(z=>setTimeout(z,7200));const it=r.strip[r.win];$('roul').classList.add('done');st.children[r.win].classList.add('win');dropSnd(it.rarity);
-  await new Promise(z=>setTimeout(z,700));reveal(it,'Випало',false)}catch(e){if(e.code==='auth')location.href='/login'}busy=false;$('copen').disabled=false;load()}
+  await new Promise(z=>setTimeout(z,700));reveal(it,'Випало',false)}catch(e){if(e.code==='auth')loginGo()&&(location.href='/login')}busy=false;$('copen').disabled=false;load()}
 async function withdraw(id){try{await api('/api/withdraw',{id});toast('Запит на вивід надіслано','ok');load()}catch(e){if(e.code==='trade'){showTab('profile');setTimeout(()=>$('ptrade')&&$('ptrade').focus(),100)}}}
 function drawWheel(){const c=+(95/mult).toFixed(2),b=bonusUI,N=b?b.N:0;
   $('wheel').style.background=b?`conic-gradient(#ff2bd6 0,#ffe600 ${N/2}%,#00f0ff ${N}%,#22d3ee ${N}%,#a855f7 ${N+c}%,#1b1830 ${N+c}% 100%)`:`conic-gradient(#22d3ee 0,#a855f7 ${c}%,#1b1830 ${c}% 100%)`;
@@ -254,10 +263,33 @@ async function doUpgrade(){if(busy)return;if(!selItem)return toast('Оберіт
   if(r.won){snd(r.neon?'neonWin':'good');reveal({name:r.prize,rarity:r.rarity,price:r.price},r.neon?'NEONDROP x'+r.nm:'Успіх!',r.neon)}else{snd('lose');toast('Апгрейд не вдався, предмет втрачено','err')}selItem=null}catch(e){}
   bonusUI=null;$('wheel').classList.remove('neon');$('nb').classList.remove('on');busy=false;load()}
 
+function loginGo(){if(document.cookie.includes('tos=1'))return true;tos();return false}
+function tos(){modal(`<h2 style="font-size:20px">Користувацька угода</h2><br><ol class="tos">
+<li>Сайт доступний лише особам, яким виповнилося <b>18 років</b>.</li>
+<li>Монети та предмети — ігрова валюта й віртуальні об’єкти сайту. Вони не є грошима чи електронними грошима і не мають гарантованої грошової вартості.</li>
+<li>Результати відкриття кейсів та апгрейдів випадкові. Шанси показано на сторінці кейса; виграш не гарантований, ви можете втратити внесені кошти. Грайте відповідально.</li>
+<li>Зараховані після поповнення монети не повертаються, окрім випадків технічної помилки сайту.</li>
+<li>Виведення предметів здійснюється після перевірки адміністратором і потребує коректного trade-посилання. Затримки можуть залежати від обмежень Steam.</li>
+<li>Заборонені мультиакаунти, боти, зловживання промокодами, шахрайство та обхід правил. За порушення акаунт може бути заблоковано, а баланс анульовано.</li>
+<li>Промокод діє один раз на акаунт і лише на поповнення, у межах ліміту використань.</li>
+<li>Ви самостійно відповідаєте за те, що участь у подібних іграх дозволена законом у вашій країні.</li>
+<li>Сайт не пов’язаний із Valve та Steam. Назви й зображення предметів належать їхнім власникам.</li>
+<li>Адміністрація може змінювати ці умови; продовжуючи користуватися сайтом, ви погоджуєтеся з новою редакцією.</li></ol>
+<label style="display:flex;gap:10px;align-items:center;margin:14px 0"><input type="checkbox" id="tosc" style="width:auto" onchange="$('tosb').disabled=!this.checked"> Мені виповнилося 18 років, я прочитав(ла) та приймаю умови</label>
+<button class="btn go" id="tosb" disabled style="width:100%" onclick="document.cookie='tos=1;path=/;max-age=31536000;SameSite=Lax';location.href='/login'">Прийняти та увійти через Steam</button>`)}
+let feedSeen=new Set(),feedInit=false;
+async function feedLoad(){try{const r=await fetch('/api/feed').then(x=>x.json()),L=$('feedList'),fresh=r.filter(d=>!feedSeen.has(d.id)).reverse();
+  if(fresh.length)L.querySelector('.fe')?.remove();
+  fresh.forEach(d=>{feedSeen.add(d.id);const e=document.createElement('div');e.className='fd';e.title=d.name+' · '+d.case;e.style.setProperty('--c',col(d.rarity));
+    e.innerHTML=`${sk(d.name)}<b>${esc(d.nick)}</b><small>${esc(d.name.split(' | ').pop())}</small><em>${d.price}</em>`;L.prepend(e);if(feedInit)snd('tick')});
+  while(L.children.length>10)L.lastChild.remove();feedInit=true}catch(e){}}
+setInterval(feedLoad,5000);feedLoad();
 function openDeposit(){modal(`<h2 style="font-size:20px">Поповнення</h2><br><div class="opt"><button class="btn o" id="mc" disabled>Криптовалюта · скоро</button><button class="btn" id="mk">Картка UAH</button></div>
-  <label>Сума в UAH (50–50 000)</label><input type="number" id="amt" value="500" min="50"><button class="btn" style="width:100%" onclick="sendDep()">Продовжити</button>`)}
-async function sendDep(){try{const r=await api('/api/deposit',{method:'card',amount:+$('amt').value});
-  modal(`<h2 style="font-size:20px">Заявка #${r.id}</h2><br><p>Переказ на картку (UAH):</p><div class="req">${esc(r.requisites)}</div><p>Після оплати адміністратор підтвердить заявку, і на баланс зарахується <b>${r.coins}</b> монет. Ви отримаєте сповіщення в профілі.</p><br><button class="btn" onclick="closeModal()">Готово</button>`);toast('Заявку створено','ok')}catch(e){if(e.code==='auth')location.href='/login'}}
+  <label>Сума в UAH (50–50 000)</label><input type="number" id="amt" value="500" min="50">
+  <label>Промокод (необов’язково)</label><input id="pcode" placeholder="NEON20" style="text-transform:uppercase" onchange="checkPromo()"><p id="pinfo" style="color:var(--mute);font-size:13px;min-height:18px"></p><button class="btn" style="width:100%" onclick="sendDep()">Продовжити</button>`)}
+async function checkPromo(){const v=$('pcode').value.trim();if(!v){$('pinfo').textContent='';return}try{const r=await api('/api/promo',{code:v});$('pinfo').innerHTML=`✅ Бонус <b>+${r.pct}%</b> до поповнення`}catch(e){$('pinfo').textContent=''}}
+async function sendDep(){try{const r=await api('/api/deposit',{method:'card',amount:+$('amt').value,promo:$('pcode').value});
+  modal(`<h2 style="font-size:20px">Заявка #${r.id}</h2><br><p>Переказ на картку (UAH):</p><div class="req">${esc(r.requisites)}</div><p>Після оплати адміністратор підтвердить заявку, і на баланс зарахується <b>${r.coins}</b> монет${r.pct?` (з бонусом +${r.pct}%)`:''}. Ви отримаєте сповіщення в профілі.</p><br><button class="btn" onclick="closeModal()">Готово</button>`);toast('Заявку створено','ok')}catch(e){if(e.code==='auth')loginGo()&&(location.href='/login')}}
 showTab((location.hash||'#home').slice(1).replace('casepage','cases'));load();setInterval(()=>{if(S.me&&!busy&&!$('modal'))load()},15000);
 </script>
 
