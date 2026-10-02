@@ -1,10 +1,10 @@
-import os, re, random, sqlite3, requests
+import os, re, random, sqlite3, requests, hashlib, threading
 from urllib.parse import urlencode, quote
 from flask import Flask, request, session, jsonify, render_template, redirect, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ---------- Конфіг ----------
-TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAG3DnyEx4_aIiwgQQ_6S3aBRK-kMkOtcZY")  # репозиторій на GitHub має бути PRIVATE
+TOKEN = os.getenv("BOT_TOKEN", "")  # токен бота — ТІЛЬКИ у змінній середовища Render (Environment → BOT_TOKEN)
 ADMINS = [7952645598, 6526861547]
 SITE_URL = (os.getenv("SITE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:5000").rstrip("/")  # публічний https, потрібен для входу через Steam
 SECRET = os.getenv("SECRET", "47093f0947c35dfe127973a6881397b4885bc0bfe2299583")
@@ -221,7 +221,20 @@ def index():
 
 
 @app.route("/health")
-def health(): return "ok"
+def health(): return f"ok images={len(IMGS)} skins={len(CAT)} bot={'on' if TOKEN else 'no token'}"
+
+
+def _tgkey(): return hashlib.sha256(TOKEN.encode()).hexdigest()[:32]
+
+
+@app.route("/tg/<key>", methods=["POST"])
+def tg_webhook(key):  # Telegram шле оновлення сюди (webhook): працює і коли Render «прокидається»
+    if not TOKEN or key != _tgkey(): return "", 404
+    try:
+        import telebot, bot as tgbot
+        tgbot.bot.process_new_updates([telebot.types.Update.de_json(request.get_data(as_text=True))])
+    except Exception as e: print("webhook error:", e)
+    return "ok"
 
 
 @app.errorhandler(Exception)
@@ -443,5 +456,27 @@ def withdraw():
 
 
 init_db(); load_cat(); load_images()
+
+
+def _bg():  # фонові задачі при старті: скіни, картинки, Telegram-бот (працює з будь-якою Start Command)
+    try:
+        c = db(); n = c.execute("SELECT COUNT(*) FROM skins").fetchone()[0]; c.close()
+        if n < 200:
+            import import_skins  # виконує імпорт при імпорті
+            load_cat()
+    except Exception as e: print("import_skins failed:", e)
+    try:
+        if len(IMGS) < 1000: print("images loaded:", fetch_images())
+    except Exception as e: print("images failed:", e)
+    if not TOKEN: print("BOT_TOKEN не задано — бот вимкнено"); return
+    try:
+        import bot as tgbot
+        if SITE_URL.startswith("https://"): print("webhook set:", tgbot.bot.set_webhook(url=f"{SITE_URL}/tg/{_tgkey()}"))
+        else: tgbot.bot.remove_webhook(); tgbot.bot.infinity_polling(skip_pending=True)
+    except Exception as e: print("bot error:", e)
+
+
+if not os.environ.get("ND_STARTED") and not os.environ.get("ND_NO_BG"):
+    os.environ["ND_STARTED"] = "1"; threading.Thread(target=_bg, daemon=True).start()
 if __name__ == "__main__":
     app.run(port=5000)
