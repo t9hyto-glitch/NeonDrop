@@ -1,31 +1,26 @@
-import sys
-import os
-import subprocess
-import re, random, sqlite3, requests
+import os, re, random, sqlite3, requests
 from urllib.parse import urlencode
-from flask import Flask, request, session, jsonify, redirect, send_from_directory
+from flask import Flask, request, session, jsonify, render_template, redirect, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-# Автозапуск бота на Render без циклического импорта
-if "bot.py" not in sys.argv[0] and not os.environ.get("BOT_SPAWNED"):
-    os.environ["BOT_SPAWNED"] = "1"
-    subprocess.Popen([sys.executable, "bot.py"])
-
 # ---------- Конфіг ----------
-TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAERO-v0t914iHCGtgWZxYnTi8wJRAx1ye4")
+TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAG3DnyEx4_aIiwgQQ_6S3aBRK-kMkOtcZY")  # репозиторій на GitHub має бути PRIVATE
 ADMINS = [7952645598, 6526861547]
-SITE_URL = os.getenv("SITE_URL", "https://neondrop-rm5p.onrender.com")
-SECRET = os.getenv("SECRET", "change-me-please")
-STEAM_KEY = os.getenv("STEAM_API_KEY", "")
-PAY_CARD = os.getenv("PAY_CARD", "4874100010251687")
-PAY_CRYPTO = os.getenv("PAY_CRYPTO", "")
+SITE_URL = (os.getenv("SITE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:5000").rstrip("/")  # публічний https, потрібен для входу через Steam
+SECRET = os.getenv("SECRET", "47093f0947c35dfe127973a6881397b4885bc0bfe2299583")
+STEAM_KEY = os.getenv("STEAM_API_KEY", "")      # для підтягування ніка/аватарки зі Steam
+PAY_CARD = os.getenv("PAY_CARD", "4874100010251687")            # реквізити картки UAH (задайте самі)
+PAY_CRYPTO = os.getenv("PAY_CRYPTO", "")        # адреса крипто-гаманця (задайте самі)
 COINS_PER_UAH = float(os.getenv("COINS_PER_UAH", "2.4"))
-DB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "neondrop.db")
+BASE = os.path.dirname(os.path.abspath(__file__))
+DB = os.getenv("DB_PATH") or os.path.join(BASE, "neondrop.db")  # на Render вкажіть шлях на Persistent Disk, напр. /var/data/neondrop.db
+os.makedirs(os.path.dirname(DB), exist_ok=True)
 TRADE_RE = re.compile(r"^https://steamcommunity\.com/tradeoffer/new/\?partner=\d+&token=[\w-]+$")
 
-app = Flask(__name__, static_folder=".")
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+app = Flask(__name__)
 app.secret_key = SECRET
+app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # Render стоїть за проксі
+app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=SITE_URL.startswith("https://"), PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)
 
 SEED = {
     "Mil-Spec": [("P250 | Sand Dune", 15), ("MP9 | Storm", 20), ("Nova | Predator", 25), ("SG 553 | Damascus Steel", 35), ("Glock-18 | Sand Dune", 18)],
@@ -35,7 +30,7 @@ SEED = {
     "Rare Special": [("★ Karambit | Doppler", 9000), ("★ Butterfly Knife | Fade", 13000), ("★ Sport Gloves | Vice", 15000)],
 }
 WEIGHTS = {"Mil-Spec": 79.92, "Restricted": 15.98, "Classified": 3.2, "Covert": 0.64, "Rare Special": 0.26}
-
+# (id, назва, ціна в монетах, ключові слова) — ціна завжди вища за середню вартість предметів (RTP ≈ 87%)
 CASE_DEFS = [
     ("starter", "Starter Box", 50, []),
     ("pistol", "Pistol Party", 50, ["Glock", "USP", "Desert Eagle", "P250", "Five-SeveN", "CZ75", "Tec-9"]),
@@ -53,19 +48,17 @@ CASE_DEFS = [
     ("butterfly", "Butterfly Effect", 15000, ["Butterfly", "Bayonet", "Flip"]),
     ("elite", "Elite Vault", 15000, []),
 ]
-QUOTA = {"Mil-Spec": 12, "Restricted": 8, "Classified": 5, "Covert": 3, "Rare Special": 2}
+QUOTA = {"Mil-Spec": 12, "Restricted": 8, "Classified": 5, "Covert": 3, "Rare Special": 2}  # разом 30
 CAT, CASES = {}, {}
 
 
 def db():
-    c = sqlite3.connect(DB, timeout=15)
-    c.row_factory = sqlite3.Row
-    c.execute("PRAGMA journal_mode=WAL;")
+    c = sqlite3.connect(DB, timeout=20); c.row_factory = sqlite3.Row  # timeout: без "database is locked" при кількох запитах
     return c
 
 
 def init_db():
-    c = db()
+    c = db(); c.execute("PRAGMA journal_mode=WAL")
     c.executescript("""
     CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY AUTOINCREMENT, steamid TEXT UNIQUE, name TEXT, avatar TEXT DEFAULT '', trade_url TEXT DEFAULT '', balance REAL DEFAULT 0);
     CREATE TABLE IF NOT EXISTS inv(id INTEGER PRIMARY KEY AUTOINCREMENT, uid INTEGER, item TEXT, status TEXT DEFAULT 'own');
@@ -96,7 +89,7 @@ def load_cat():
         ps = [CAT[n][1] for n in names]; target = price * .87
         def ev(x): w = [p ** -x for p in ps]; return sum(p * q for p, q in zip(ps, w)) / sum(w)
         lo, hi = 0.0, 8.0
-        for _ in range(40):
+        for _ in range(40):  # підбираємо криву шансів, щоб середня вартість дропу ≈ 87% ціни
             mid = (lo + hi) / 2
             if ev(mid) > target: lo = mid
             else: hi = mid
@@ -155,7 +148,7 @@ def withdraw_stats(uid):
     return {"n": len(done), "sum": sum(done), "pending": sum(r["status"] == "withdraw" for r in rows)}
 
 
-def promo_get(code, uid=None):
+def promo_get(code, uid=None):  # -> (відсоток бонусу, помилка)
     code = (code or "").strip().upper()
     if not code: return 0, None
     c = db(); p = c.execute("SELECT * FROM promos WHERE code=?", (code,)).fetchone()
@@ -166,14 +159,14 @@ def promo_get(code, uid=None):
     return p["pct"], None
 
 
-def release_promo(did):
+def release_promo(did):  # відхилена заявка повертає промокод
     c = db(); d = c.execute("SELECT uid,promo FROM deposits WHERE id=?", (did,)).fetchone()
     if d and d["promo"] and c.execute("DELETE FROM promo_uses WHERE code=? AND uid=?", (d["promo"], d["uid"])).rowcount:
         c.execute("UPDATE promos SET used=MAX(0,used-1) WHERE code=?", (d["promo"],))
     c.commit(); c.close()
 
 
-def promo_save(code, pct, max_uses=0):
+def promo_save(code, pct, max_uses=0):  # лише з адмін-бота
     c = db(); c.execute("INSERT INTO promos(code,pct,max_uses) VALUES(?,?,?) ON CONFLICT(code) DO UPDATE SET pct=excluded.pct,max_uses=excluded.max_uses,active=1", (code, pct, max_uses)); c.commit(); c.close()
 
 
@@ -185,7 +178,7 @@ def promos_list():
     c = db(); rows = c.execute("SELECT code,pct,max_uses,used FROM promos WHERE active=1 ORDER BY code").fetchall(); c.close(); return rows
 
 
-def adjust_balance(uid, amount):
+def adjust_balance(uid, amount):  # лише з адмін-бота; баланс не йде нижче 0
     c = db(); n = c.execute("UPDATE users SET balance=MAX(0,balance+?) WHERE id=?", (amount, uid)).rowcount; c.commit()
     r = c.execute("SELECT balance FROM users WHERE id=?", (uid,)).fetchone(); c.close()
     if not n: return None
@@ -193,7 +186,7 @@ def adjust_balance(uid, amount):
     return r["balance"]
 
 
-def confirm_deposit(did):
+def confirm_deposit(did):  # викликається з адмін-бота
     c = db(); d = c.execute("SELECT * FROM deposits WHERE id=? AND status='pending'", (did,)).fetchone()
     if not d: c.close(); return None
     c.execute("UPDATE deposits SET status='paid' WHERE id=?", (did,))
@@ -212,21 +205,36 @@ def me(): return session.get("uid")
 
 def need_auth(f):
     def w(*a, **k):
-        if not me(): return jsonify(error="Увійдіть через Steam", code="auth"), 401
+        if not me() or not user(me()):  # сесія є, а користувача в БД вже немає (напр. БД перестворена)
+            session.clear(); return jsonify(error="Увійдіть через Steam", code="auth"), 401
         return f(*a, **k)
     w.__name__ = f.__name__
     return w
 
 
-# Отдача файла напрямую (без Jinja2)
 @app.route("/")
 def index():
-    return send_from_directory(".", "index.html")
+    for p in (os.path.join(BASE, "templates", "index.html"), os.path.join(BASE, "index.html")):  # працює і з templates/, і з кореня репозиторію
+        if os.path.exists(p): return send_file(p, max_age=0)
+    return "index.html не знайдено в репозиторії", 500
+
+
+@app.route("/health")
+def health(): return "ok"
+
+
+@app.errorhandler(Exception)
+def on_error(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException): return e
+    app.logger.exception("Unhandled error")  # повний traceback видно в Render → Logs
+    if request.path.startswith("/api/"): return jsonify(error="Помилка сервера, спробуйте ще раз"), 500
+    return "Помилка сервера", 500
 
 
 @app.route("/login")
 def login():
-    if request.cookies.get("tos") != "1": return redirect("/")
+    if request.cookies.get("tos") != "1": return redirect("/")  # спочатку потрібно прийняти угоду
     p = {"openid.ns": "http://specs.openid.net/auth/2.0", "openid.mode": "checkid_setup",
          "openid.return_to": SITE_URL + "/auth/steam", "openid.realm": SITE_URL,
          "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
@@ -239,7 +247,9 @@ def auth_steam():
     a = request.args.to_dict(); a["openid.mode"] = "check_authentication"
     m = re.search(r"/openid/id/(\d+)$", a.get("openid.claimed_id", ""))
     try: ok = "is_valid:true" in requests.post("https://steamcommunity.com/openid/login", data=a, timeout=10).text
-    except Exception: ok = False
+    except Exception as e: print("steam verify error:", e); ok = False
+    if not a.get("openid.return_to", "").startswith(SITE_URL): ok = False
+    if not (ok and m): print("steam login failed. SITE_URL =", SITE_URL, "| return_to =", a.get("openid.return_to"))
     if ok and m:
         sid = m.group(1); name, av = "Player " + sid[-4:], ""
         if STEAM_KEY:
@@ -311,7 +321,7 @@ def open_case():
     if not case: return jsonify(error="Кейс не знайдено"), 400
     if not spend(uid, case["price"]): return jsonify(error="Недостатньо балансу. Поповніть рахунок."), 400
     win = roll_item(case); give(uid, win)
-    if CAT[win][1] >= max(150, case["price"] * 3):
+    if CAT[win][1] >= max(150, case["price"] * 3):  # крутий дроп → у стрічку зліва (з затримкою, щоб не спойлерити анімацію)
         c = db(); c.execute("INSERT INTO drops(uid,item,case_name,price,show_at) VALUES(?,?,?,?,datetime('now','+9 seconds'))", (uid, win, case["name"], CAT[win][1])); c.commit(); c.close()
     strip = [roll_item(case) for _ in range(60)]; strip[50] = win
     add_log(uid, "case", f"{case['name']} -> {win}")
@@ -330,7 +340,7 @@ def upgrade():
     if not r or r["item"] not in CAT: c.close(); return jsonify(error="Предмет не знайдено"), 400
     c.execute("UPDATE inv SET status='used' WHERE id=?", (d["id"],)); c.commit(); c.close()
     src = r["item"]; chance = round(95 / mult, 2); roll = random.uniform(0, 100)
-    bonus = random.random() < 0.01; nm = random.choice((2, 3)) if bonus else 1; N = 10 if bonus else 0
+    bonus = random.random() < 0.01; nm = random.choice((2, 3)) if bonus else 1; N = 10 if bonus else 0  # NeonDrop: 1% шанс, неоновий сектор 10% колеса
     neon = bonus and roll < N; won = neon or N <= roll < N + chance; prize = None
     if won:
         t = CAT[src][1] * mult * (nm if neon else 1); prize = min(CAT, key=lambda n: abs(CAT[n][1] - t)); give(uid, prize)
@@ -375,7 +385,5 @@ def withdraw():
 
 
 init_db(); load_cat()
-
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(port=5000)
