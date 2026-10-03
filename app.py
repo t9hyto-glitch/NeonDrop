@@ -1,4 +1,4 @@
-import os, re, random, sqlite3, requests, hashlib, threading, time, bisect
+import os, re, random, sqlite3, requests, hashlib, threading, time, bisect, gzip, json, atexit
 from urllib.parse import urlencode, quote
 from flask import Flask, request, session, jsonify, render_template, redirect, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -70,11 +70,13 @@ def init_db():
     CREATE TABLE IF NOT EXISTS promo_uses(code TEXT, uid INTEGER, UNIQUE(code, uid));
     CREATE TABLE IF NOT EXISTS drops(id INTEGER PRIMARY KEY AUTOINCREMENT, uid INTEGER, item TEXT, case_name TEXT, price INTEGER, show_at DATETIME);
     CREATE TABLE IF NOT EXISTS images(k TEXT PRIMARY KEY, u TEXT);
+    CREATE TABLE IF NOT EXISTS settings(k TEXT PRIMARY KEY, v TEXT);
     """)
     try: c.execute("ALTER TABLE deposits ADD COLUMN promo TEXT DEFAULT ''")
     except sqlite3.OperationalError: pass
-    try: c.execute("ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0")
-    except sqlite3.OperationalError: pass
+    for col in ("banned INTEGER DEFAULT 0", "luck_case REAL DEFAULT 1", "luck_up REAL DEFAULT 1", "luck_until REAL DEFAULT 0"):
+        try: c.execute("ALTER TABLE users ADD COLUMN " + col)
+        except sqlite3.OperationalError: pass
     if not c.execute("SELECT 1 FROM skins LIMIT 1").fetchone():
         c.executemany("INSERT INTO skins VALUES(?,?,?)", [(n, r, p) for r, l in SEED.items() for n, p in l])
     c.commit(); c.close()
@@ -200,8 +202,82 @@ def confirm_deposit(did):  # викликається з адмін-бота
     return d
 
 
-def roll_item(case):
-    return random.choices([n for n, w in case["items"]], [w for n, w in case["items"]])[0]
+def roll_item(case, luck=1.0):  # luck >1 збільшує шанс предметів дорожчих за ціну кейса
+    return random.choices([n for n, w in case["items"]], [w * (luck if CAT.get(n, ("", 0))[1] >= case["price"] else 1) for n, w in case["items"]])[0]
+
+
+def setting(k, d=""):
+    c = db(); r = c.execute("SELECT v FROM settings WHERE k=?", (k,)).fetchone(); c.close(); return r["v"] if r else d
+
+
+def set_setting(k, v):
+    c = db(); c.execute("INSERT INTO settings(k,v) VALUES(?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v", (k, str(v))); c.commit(); c.close()
+
+
+def event_luck():  # (множник, секунд лишилось) — глобальний івент «x2 удача»
+    left = float(setting("ev_until", "0")) - time.time()
+    return (float(setting("ev_mult", "1")), int(left)) if left > 0 else (1.0, 0)
+
+
+def luck_user(uid):  # персональний буст від адміна: (кейси, апгрейд, до якого часу)
+    u = user(uid)
+    return (u["luck_case"] or 1.0, u["luck_up"] or 1.0, u["luck_until"] or 0) if u and (not u["luck_until"] or u["luck_until"] > time.time()) else (1.0, 1.0, 0)
+
+
+def luck_for(uid):
+    ev = event_luck()[0]; lc, lu, _ = luck_user(uid); return lc * ev, lu * ev
+
+
+def wipe_all():  # повне очищення сайту (скіни й картинки лишаються)
+    c = db()
+    for t in ("users", "inv", "deposits", "notes", "log", "drops", "promos", "promo_uses", "settings"): c.execute("DELETE FROM " + t)
+    c.commit(); c.close(); BK["allow_empty"] = True; backup_now(True)
+
+
+TG = "https://api.telegram.org"
+BK = {"mid": None, "mt": 0, "t": 0, "state": "n/a", "allow_empty": False}
+
+
+def _bk_chat(): return int(os.getenv("BACKUP_CHAT") or ADMINS[0])
+
+
+def tg(method, files=None, **data):
+    r = requests.post(f"{TG}/bot{TOKEN}/{method}", data=data, files=files, timeout=60).json()
+    if not r.get("ok"): raise RuntimeError(r.get("description"))
+    return r["result"]
+
+
+def restore_backup():  # Render free стирає диск: порожню БД відновлюємо з файлу в закріпленому повідомленні Telegram
+    try:
+        pm = tg("getChat", chat_id=_bk_chat()).get("pinned_message") or {}; d = pm.get("document") or {}
+        if not str(d.get("file_name", "")).startswith("neondrop_backup"): BK["state"] = "restore: немає закріпленого бекапу"; return
+        fp = tg("getFile", file_id=d["file_id"])["file_path"]
+        open(DB, "wb").write(gzip.decompress(requests.get(f"{TG}/file/bot{TOKEN}/{fp}", timeout=120).content)); BK["mid"] = pm["message_id"]; BK["state"] = "restored"
+    except Exception as e: BK["state"] = "restore error: " + str(e)[:60]
+
+
+def backup_now(force=False):  # бекап БД у Telegram (редагує одне й те саме закріплене повідомлення)
+    if not TOKEN or (not force and time.time() - BK["t"] < 60): return
+    BK["t"] = time.time()
+    try:
+        mt = max(os.path.getmtime(p) for p in (DB, DB + "-wal") if os.path.exists(p))
+        if not force and mt <= BK["mt"]: return
+        c = db(); users = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]; c.close()
+        if not users and not BK["allow_empty"]: return  # порожню БД не пишемо поверх хорошого бекапу
+        src = sqlite3.connect(DB, timeout=20); dst = sqlite3.connect(DB + ".snap"); src.backup(dst); dst.close(); src.close()
+        blob = gzip.compress(open(DB + ".snap", "rb").read(), 6); os.remove(DB + ".snap")
+        if BK["mid"]:
+            try: tg("editMessageMedia", files={"d": ("neondrop_backup.db.gz", blob)}, chat_id=_bk_chat(), message_id=BK["mid"], media=json.dumps({"type": "document", "media": "attach://d"}))
+            except Exception as e:
+                if "not modified" not in str(e): BK["mid"] = None
+        if not BK["mid"]:
+            m = tg("sendDocument", files={"document": ("neondrop_backup.db.gz", blob)}, chat_id=_bk_chat(), caption="Автобекап NeonDrop — не видаляйте і не відкріплюйте")
+            BK["mid"] = m["message_id"]; tg("pinChatMessage", chat_id=_bk_chat(), message_id=BK["mid"], disable_notification="true")
+        BK["mt"] = mt; BK["allow_empty"] = False; BK["state"] = "ok " + time.strftime("%H:%M:%S")
+    except Exception as e: BK["state"] = "error: " + str(e)[:60]
+
+
+atexit.register(lambda: backup_now(True))
 
 
 def me(): return session.get("uid")
@@ -227,7 +303,7 @@ def index():
 @app.route("/health")
 def health():  # його ж можна пінгувати (UptimeRobot), щоб Render не засинав; заодно сам лагодить webhook бота
     threading.Thread(target=ensure_webhook, daemon=True).start()
-    return f"ok images={len(IMGS)} skins={len(CAT)} bot={'on' if TOKEN else 'NO TOKEN'} webhook={WH['state']}"
+    return f"ok images={len(IMGS)} skins={len(CAT)} bot={'on' if TOKEN else 'NO TOKEN'} webhook={WH['state']} backup={BK['state']}"
 
 
 WH = {"state": "n/a", "t": 0}
@@ -294,7 +370,7 @@ def auth_steam():
         c = db(); c.execute("INSERT OR IGNORE INTO users(steamid,name,avatar) VALUES(?,?,?)", (sid, name, av)); c.commit()
         r = c.execute("SELECT id,banned FROM users WHERE steamid=?", (sid,)).fetchone(); c.close()
         if r["banned"]: return redirect("/?banned=1")
-        session["uid"] = r["id"]
+        session.permanent = True; session["uid"] = r["id"]  # вхід на 30 днів, не слітає при закритті браузера
     return redirect("/")
 
 
@@ -306,7 +382,10 @@ def logout(): session.clear(); return redirect("/")
 def state():
     uid = me(); u = user(uid) if uid else None
     if u and u["banned"]: session.clear(); u = None
+    ev = event_luck(); lc, lu, lt = luck_user(uid) if u else (1.0, 1.0, 0); an = setting("an_id", "0")
     return jsonify(
+        luck=dict(event=dict(mult=ev[0], left=ev[1]), my=(dict(case=lc, up=lu, until=lt) if (lc, lu) != (1.0, 1.0) else None)),
+        announce=dict(id=an, text=setting("an_text", "")) if time.time() - float(an) < 86400 else None,
         me=u and {"id": uid, "name": u["name"], "avatar": u["avatar"], "steamid": u["steamid"], "trade_url": u["trade_url"], "balance": u["balance"]},
         inventory=inventory(uid) if u else [], odds=WEIGHTS, notes=notes_of(uid) if u else [], stats=withdraw_stats(uid) if u else None,
         cases=[{"id": k, "name": v["name"], "price": v["price"], "n": len(v["items"]), "tier": max((CAT.get(n, ("Mil-Spec", 0))[0] for n, w in v["items"]), key=list(WEIGHTS).index)} for k, v in list(CASES.items())])
@@ -433,7 +512,7 @@ def open_case():
     uid = me(); case = CASES.get((request.json or {}).get("case"))
     if not case: return jsonify(error="Кейс не знайдено"), 400
     if not spend(uid, case["price"]): return jsonify(error="Недостатньо балансу. Поповніть рахунок."), 400
-    win = roll_item(case); inv_id = give(uid, win)
+    win = roll_item(case, luck_for(uid)[0]); inv_id = give(uid, win)
     if CAT[win][1] >= max(150, case["price"] * 3):  # крутий дроп → у стрічку зліва (з затримкою, щоб не спойлерити анімацію)
         c = db(); c.execute("INSERT INTO drops(uid,item,case_name,price,show_at) VALUES(?,?,?,?,datetime('now','+9 seconds'))", (uid, win, case["name"], CAT[win][1])); c.commit(); c.close()
     strip = [roll_item(case) for _ in range(60)]; strip[50] = win
@@ -453,14 +532,14 @@ def upgrade():
     if not 1 <= chance <= 75: c.close(); return jsonify(error="Шанс має бути від 1% до 75%"), 400
     if not c.execute("UPDATE inv SET status='used' WHERE id=? AND status='own'", (d["id"],)).rowcount: c.close(); return jsonify(error="Предмет не знайдено"), 400
     c.commit(); c.close()
-    roll = random.uniform(0, 100)
+    roll = random.uniform(0, 100); eff = min(95.0, chance * luck_for(uid)[1])  # персональна/івентова удача
     bonus = random.random() < 0.01; nm = random.choice((2, 3)) if bonus else 1; N = 10 if bonus else 0  # NeonDrop: 1% шанс, неоновий сектор 10% колеса
-    neon = bonus and roll < N; won = neon or N <= roll < N + chance; prize = None; inv_id = None
+    neon = bonus and roll < N; won = neon or N <= roll < N + eff; prize = None; inv_id = None
     if won:
         prize = min(CAT, key=lambda n: abs(CAT[n][1] - tp * nm)) if neon else tgt; inv_id = give(uid, prize)
     add_log(uid, "upgrade", f"{src} -> {tgt} ({chance}%){' NEON x' + str(nm) if bonus else ''}: {prize or 'програш'}")
     notify(f"⚡ Апгрейд\n{who(uid)}\n{src} → {tgt} (шанс {chance}%){' ⚡NEONDROP x' + str(nm) if bonus else ''}\n{'ВИГРАШ → ' + prize if won else 'Програш'}")
-    return jsonify(won=won, roll=roll, chance=chance, prize=prize, bonus=bonus, neon=neon, nm=nm, N=N, rarity=prize and CAT[prize][0], price=prize and CAT[prize][1], inv=inv_id)
+    return jsonify(won=won, roll=roll, chance=round(eff, 2), prize=prize, bonus=bonus, neon=neon, nm=nm, N=N, rarity=prize and CAT[prize][0], price=prize and CAT[prize][1], inv=inv_id)
 
 
 @app.route("/api/deposit", methods=["POST"])
@@ -498,6 +577,12 @@ def withdraw():
     return jsonify(ok=True)
 
 
+if TOKEN and not os.environ.get("ND_NO_BG"):  # новий інстанс Render: порожня/відсутня БД → відновлюємо з Telegram
+    fresh = not os.path.exists(DB)
+    if not fresh:
+        try: _c = sqlite3.connect(DB); fresh = _c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0; _c.close()
+        except Exception: fresh = True
+    if fresh: restore_backup()
 init_db(); load_cat(); load_images()
 
 
@@ -521,7 +606,9 @@ def _bg():  # фонові задачі при старті: Telegram-бот (п
     except Exception as e: print("images failed:", e)
     try: fill_missing()
     except Exception as e: print("fill_missing failed:", e)
-    while TOKEN and SITE_URL.startswith("https://"): time.sleep(300); ensure_webhook()  # сторожок: якщо webhook збили — ставимо назад
+    while TOKEN:  # сторожок: бекап БД в Telegram і перевірка webhook
+        time.sleep(30); backup_now()
+        if SITE_URL.startswith("https://"): ensure_webhook()
 
 
 if not os.environ.get("ND_STARTED") and not os.environ.get("ND_NO_BG"):

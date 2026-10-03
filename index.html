@@ -170,9 +170,20 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radiu
 .upR .btn.go{min-width:280px;padding:15px 40px;font-size:16px;letter-spacing:.04em;border-radius:14px;box-shadow:0 0 34px #a855f788,0 8px 24px #0008;transition:transform .15s,box-shadow .2s}
 .upR .btn.go:hover{transform:translateY(-2px);box-shadow:0 0 50px #a855f7cc,0 10px 28px #0008}.upR .btn.go:active{transform:scale(.98)}
 @media(max-width:900px){.ug>#uTarget,.ug>#uStake{margin-top:0}}
+
+#luck{position:fixed;right:18px;bottom:18px;z-index:50;display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+.lk{display:flex;align-items:center;gap:12px;padding:10px 16px 10px 12px;border-radius:16px;border:1.5px solid #22d3ee88;background:linear-gradient(135deg,#0b0916ee,#1a0b3aee);backdrop-filter:blur(8px);box-shadow:0 0 30px #22d3ee66;animation:pop .5s,npulse 1.6s ease-in-out infinite alternate}
+.lk svg{width:34px;height:34px;color:#4ade80;filter:drop-shadow(0 0 8px #4ade80)}.lk b{display:block;font:700 15px var(--fd);letter-spacing:.06em}.lk small{color:#ffffffb0;font-size:12px}
+.lk.me{border-color:#fde04788;box-shadow:0 0 30px #fde04755}.lk.me svg{color:#fde047;filter:drop-shadow(0 0 8px #fde047)}
+.crate{width:100%;height:100%;overflow:visible}.crate .lid{transform-origin:100px 80px;transition:transform .55s cubic-bezier(.3,1.7,.5,1)}.crate.open .lid{transform:translateY(-30px) rotate(-12deg)}
+.crate .rays{opacity:0;transform-origin:100px 100px;transition:opacity .3s}.crate.open .rays{opacity:1;animation:spin 5s linear infinite}
+.crate .shine{animation:shn 4.5s ease-in-out infinite}@keyframes shn{0%,55%{transform:translateX(-80px) skewX(-18deg)}100%{transform:translateX(220px) skewX(-18deg)}}
+@keyframes shk{0%,100%{transform:translate(0)}20%{transform:translate(-7px,2px) rotate(-3deg)}40%{transform:translate(7px,-2px) rotate(3deg)}60%{transform:translate(-5px,1px) rotate(-2deg)}80%{transform:translate(5px) rotate(2deg)}}
+.crate.shake{animation:shk .3s 3}.cc .ccb{width:150px;height:150px}.cc svg{width:176px;height:176px;margin:-12px 0;filter:drop-shadow(0 12px 18px #0009)}#cbig svg{filter:drop-shadow(0 14px 22px #000a)}
 </style>
 </head>
 <body>
+<div id="luck"></div>
 <aside class="feed" id="feed"><h4>LIVE DROP</h4><div id="feedList"><p class="fe">Тут з’являтимуться круті дропи гравців</p></div></aside>
 <header class="top">
   <a href="#" class="logo" onclick="window.scrollTo({top:0,behavior:'smooth'});return false"><i></i><b>Neon</b><span>Drop</span></a>
@@ -238,8 +249,12 @@ Object.assign(SND,{
  jackpot:()=>{SND.win();tone(65,0,1.4,'sine',.2)},
  lose:()=>{glide(330,110,0,.6,'sawtooth',.07);glide(247,82,.12,.7,'sine',.09);noise(.05,.4,900,150,.05)}});
 function burst(el,c,n){const r=el.getBoundingClientRect(),x=r.left+r.width/2,y=r.top+r.height/2;for(let i=0;i<n;i++){const p=document.createElement('i');p.className='pt';p.style.cssText=`left:${x}px;top:${y}px;background:${c};color:${c}`;document.body.appendChild(p);const a=Math.random()*6.28,d=80+Math.random()*200;p.animate([{transform:'translate(0,0) scale(1)',opacity:1},{transform:`translate(${Math.cos(a)*d}px,${Math.sin(a)*d+70}px) scale(0)`,opacity:0}],{duration:900+Math.random()*800,easing:'cubic-bezier(.1,.7,.3,1)'}).onfinish=()=>p.remove()}}
-const snd=k=>{if(!muted)try{SND[k]()}catch(e){}};
-const dropSnd=r=>snd(r==='Classified'?'good':(r==='Covert'||r==='Rare Special')?'jackpot':'drop');
+const SFX={click:['click'],tick:['tick1','tick2','tick3'],spin:['spin'],spinFast:['spinFast'],boom:['boom'],sell:['sell'],good:['good'],drop:['drop'],jackpot:['jackpot'],win:['win'],lose:['lose'],neonSpawn:['neonSpawn'],neonWin:['neonWin']},BUF={},VOL={click:.5,tick:.7,spin:.8,spinFast:.8,boom:.9,sell:.8,good:.8,drop:.9,jackpot:1,win:1,lose:.8,neonSpawn:.9,neonWin:1};let sfxOn=false;
+function loadSfx(){if(sfxOn)return;sfxOn=true;const a=AC||(AC=new (window.AudioContext||window.webkitAudioContext)());[...new Set(Object.values(SFX).flat())].forEach(n=>fetch('/static/sfx/'+n+'.mp3?v=1').then(r=>r.arrayBuffer()).then(b=>a.decodeAudioData(b)).then(d=>{BUF[n]=d}).catch(()=>{}))}
+function play(n,v,rate){const a=AC,b=BUF[n];if(!a||!b)return false;if(a.state==='suspended')a.resume();const s=a.createBufferSource(),g=a.createGain();s.buffer=b;s.playbackRate.value=rate||1;g.gain.value=v;s.connect(g);g.connect(a.destination);s.start();return true}
+const snd=k=>{if(muted)return;try{const v=SFX[k];if(v&&play(v[Math.floor(Math.random()*v.length)],VOL[k]||.8,k==='tick'?.94+Math.random()*.14:1))return;SND[k]&&SND[k]()}catch(e){}};
+document.addEventListener('pointerdown',loadSfx,{once:true});
+const dropSnd=r=>snd(r==='Classified'?'drop':(r==='Covert'||r==='Rare Special')?'jackpot':'good');
 document.addEventListener('click',e=>{if(e.target.closest('button,a.btn,.cc'))snd('click')},true);
 
 function toast(m,t=''){const d=document.createElement('div');d.className='toast '+t;d.textContent=m;$('toasts').appendChild(d);setTimeout(()=>d.remove(),4500)}
@@ -251,16 +266,30 @@ const PH='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w
 const sk=n=>`<img class="sk" loading="lazy" alt="" src="${IMG(n)}" onerror="this.onerror=null;this.src=PH">`;
 const card=(i,x='')=>`<div class="card" style="--c:${col(i.rarity)}">${sk(i.name)}<b>${esc(i.name)}</b><small>${i.rarity}</small><span class="price">${i.price}</span>${x}</div>`;
 const avaHtml=(u,c)=>u.avatar?`<img class="${c}" src="${esc(u.avatar)}">`:`<div class="${c}">${esc(u.name[0])}</div>`;
-const crate=c=>{const k=col(c.tier);return `<svg viewBox="0 0 120 120" width="112" height="112" aria-hidden="true"><defs><linearGradient id="g${c.id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${k}"/><stop offset="1" stop-color="#050505"/></linearGradient></defs><polygon points="60,8 106,34 60,60 14,34" fill="${k}"/><polygon points="14,34 60,60 60,114 14,88" fill="url(#g${c.id})"/><polygon points="106,34 60,60 60,114 106,88" fill="${k}" fill-opacity=".38"/><path d="M60 60V114M14 34L60 60L106 34M37 21L83 47M83 21L37 47" stroke="#000" stroke-opacity=".55" stroke-width="2" fill="none"/><circle cx="60" cy="34" r="7" fill="#fff"/></svg>`};
+const ICON={"bolt": "<path d=\"M3-18-9 2h8l-3 16 12-21h-8z\"/>", "pistol": "<path d=\"M-18-9H10v7H-4L-6 12h-8l2-14h-6z\"/>", "smg": "<rect x=\"-19\" y=\"-7\" width=\"32\" height=\"7\" rx=\"2\"/><rect x=\"-4\" y=\"0\" width=\"6\" height=\"14\" rx=\"1\"/><rect x=\"-14\" y=\"0\" width=\"6\" height=\"10\" rx=\"1\"/><rect x=\"13\" y=\"-6\" width=\"6\" height=\"4\"/>", "sun": "<circle r=\"7\"/><path d=\"M0-17v5M0 12v5M-17 0h5M12 0h5M-12-12l3 3M9 9l3 3M12-12l-3 3M-9 9l-3 3\" stroke-width=\"3\" stroke-linecap=\"round\"/>", "rifle": "<rect x=\"-20\" y=\"-4\" width=\"40\" height=\"6\" rx=\"2\"/><rect x=\"-8\" y=\"-9\" width=\"14\" height=\"4\" rx=\"1\"/><rect x=\"-6\" y=\"2\" width=\"6\" height=\"13\" rx=\"1\"/><rect x=\"14\" y=\"-3\" width=\"8\" height=\"10\" rx=\"2\"/>", "heavy": "<rect x=\"-20\" y=\"-5\" width=\"36\" height=\"4\" rx=\"2\"/><rect x=\"-12\" y=\"-1\" width=\"14\" height=\"6\" rx=\"2\"/><rect x=\"14\" y=\"-5\" width=\"8\" height=\"12\" rx=\"2\"/>", "star": "<path d=\"M0-17 5-5 18-5 8 3 12 16 0 8-12 16-8 3-18-5-5-5z\"/>", "scope": "<circle r=\"12\" fill=\"none\" stroke-width=\"3\"/><path d=\"M0-18V-6M0 6v12M-18 0H-6M6 0h12\" stroke-width=\"2.5\"/>", "flame": "<path d=\"M0-18C8-8 14-2 12 8 10 16 0 18-6 14-12 10-10 0-4-4-4-10 0-18Z\"/>", "glove": "<rect x=\"-10\" y=\"0\" width=\"20\" height=\"16\" rx=\"5\"/><rect x=\"-10\" y=\"-14\" width=\"5\" height=\"16\" rx=\"2.5\"/><rect x=\"-3.5\" y=\"-17\" width=\"5\" height=\"19\" rx=\"2.5\"/><rect x=\"3\" y=\"-14\" width=\"5\" height=\"16\" rx=\"2.5\"/><rect x=\"9\" y=\"-6\" width=\"6\" height=\"12\" rx=\"3\" transform=\"rotate(25 12 0)\"/>", "dragon": "<path d=\"M-18 8-10-12-4-2 0-16 4-2 10-12 18 8 8 4 0 14-8 4z\"/>", "knife": "<path d=\"M0-18C8-8 8 4 4 8H-4V-6Z\"/><rect x=\"-3\" y=\"8\" width=\"8\" height=\"10\" rx=\"2\"/>", "karambit": "<path d=\"M-10-14C10-14 16 4 8 14L4 10C8 2 2-6-10-8Z\"/><circle cx=\"-8\" cy=\"-11\" r=\"4\" fill=\"none\" stroke-width=\"2.5\"/>", "butterfly": "<g transform=\"rotate(-28)\"><path d=\"M0-18 4 2H-4Z\"/><rect x=\"-3\" y=\"2\" width=\"6\" height=\"14\" rx=\"2\"/></g><g transform=\"rotate(28)\"><path d=\"M0-18 4 2H-4Z\"/><rect x=\"-3\" y=\"2\" width=\"6\" height=\"14\" rx=\"2\"/></g>", "crown": "<path d=\"M-16 12-18-8-8 0 0-14 8 0 18-8 16 12z\"/>"};
+const TH={"starter": ["#22d3ee", "#7c3aed", "bolt"], "pistol": ["#f97316", "#b91c1c", "pistol"], "smg": ["#a3e635", "#15803d", "smg"], "sand": ["#fbbf24", "#b45309", "sun"], "rifle": ["#38bdf8", "#1d4ed8", "rifle"], "heavy": ["#94a3b8", "#334155", "heavy"], "mix": ["#e879f9", "#6d28d9", "star"], "awp": ["#4ade80", "#166534", "scope"], "redline": ["#f43f5e", "#7f1d1d", "flame"], "gloves": ["#f59e0b", "#78350f", "glove"], "dragon": ["#ef4444", "#450a0a", "dragon"], "knife": ["#67e8f9", "#0e7490", "knife"], "karambit": ["#c084fc", "#581c87", "karambit"], "butterfly": ["#fb7185", "#9d174d", "butterfly"], "elite": ["#fde047", "#a16207", "crown"]};
+const crate=(c,x='')=>{const[a,b,ic]=TH[c.id]||[col(c.tier),'#1b1530','star'],i='k'+c.id+x;let rays='';for(let n=0;n<14;n++){const t=n/14*6.283,u=t+.2;rays+=`M100 100L${100+Math.cos(t)*150} ${100+Math.sin(t)*150}L${100+Math.cos(u)*150} ${100+Math.sin(u)*150}Z`}
+ return `<svg class="crate" viewBox="0 0 200 200" aria-hidden="true"><defs><linearGradient id="${i}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient><linearGradient id="${i}m" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#262b36"/><stop offset=".5" stop-color="#6b7384"/><stop offset="1" stop-color="#1e222b"/></linearGradient><radialGradient id="${i}g"><stop offset="0" stop-color="${a}" stop-opacity=".6"/><stop offset="1" stop-color="${a}" stop-opacity="0"/></radialGradient><clipPath id="${i}c"><rect x="36" y="50" width="128" height="124" rx="10"/></clipPath></defs>
+ <circle cx="100" cy="115" r="95" fill="url(#${i}g)"/><path class="rays" d="${rays}" fill="${a}" fill-opacity=".22"/><ellipse cx="100" cy="178" rx="64" ry="9" fill="#000" opacity=".55"/>
+ <rect x="42" y="84" width="116" height="90" rx="10" fill="url(#${i}f)"/><path d="M52 174 78 84h14l-26 90zM96 174 122 84h14l-26 90z" fill="#000" opacity=".13"/><rect x="42" y="84" width="14" height="90" rx="6" fill="#0b0d12" opacity=".8"/><rect x="144" y="84" width="14" height="90" rx="6" fill="#0b0d12" opacity=".8"/>
+ <rect x="64" y="104" width="72" height="54" rx="9" fill="#07040f" stroke="${a}" stroke-width="2.5"/><g transform="translate(100 131) scale(.95)" fill="#fff" stroke="#fff" stroke-linejoin="round">${ICON[ic]||ICON.star}</g>
+ <g class="lid"><path d="M46 50h108l10 14H36z" fill="${a}"/><rect x="36" y="64" width="128" height="26" rx="8" fill="url(#${i}m)"/><rect x="36" y="64" width="128" height="4" rx="2" fill="#fff" opacity=".28"/><rect x="68" y="72" width="13" height="22" rx="3" fill="#d6dde8"/><rect x="119" y="72" width="13" height="22" rx="3" fill="#d6dde8"/></g>
+ <g clip-path="url(#${i}c)"><rect class="shine" x="20" y="40" width="30" height="150" fill="#fff" opacity=".2"/></g></svg>`};
 
-async function load(){let s;try{const r=await fetch('/api/state');if(!r.ok)throw 0;s=await r.json()}catch(e){if(!S.cases)setTimeout(load,3000);return}S=s;render();(S.notes||[]).forEach(n=>{if(!n.read&&!shown.has(n.id)){shown.add(n.id);toast(n.text,'ok');snd('good')}})}
+let luckAt=0,lkSig='';
+const CLOVER='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 11C10 6 4 6 4 10s4 5 8 3c-4 2-6 8-2 9s5-5 2-8c3 3 9 3 9-1s-6-5-9-2c3-3 2-9-2-9S9 7 12 11z"/></svg>',STAR='<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3 7 7 .6-5.3 4.7 1.6 7.2L12 17.8 5.7 21.5l1.6-7.2L2 9.6 9 9z"/></svg>';
+function tickLuck(){const L=S.luck;if(!L)return;const el=Math.floor((Date.now()-luckAt)/1000),ev=L.event.left-el,my=L.my&&L.my.until?L.my.until-Date.now()/1000:0,f=s=>{s=Math.max(0,Math.floor(s));const h=Math.floor(s/3600),m=Math.floor(s%3600/60);return(h?h+':'+String(m).padStart(2,'0'):m)+':'+String(s%60).padStart(2,'0')},sig=(ev>0?'e'+L.event.mult:'')+(L.my?'m'+L.my.case+'/'+L.my.up:'');
+  if(sig!==lkSig){lkSig=sig;$('luck').innerHTML=(ev>0?`<div class="lk">${CLOVER}<div><b>x${L.event.mult} УДАЧА</b><small id="lkE"></small></div></div>`:'')+(L.my?`<div class="lk me">${STAR}<div><b>Ваша удача</b><small>кейси x${+L.my.case.toFixed(2)} · апгрейд x${+L.my.up.toFixed(2)}<span id="lkM"></span></small></div></div>`:'')}
+  if(ev>0&&$('lkE'))$('lkE').textContent='залишилось '+f(ev);if($('lkM'))$('lkM').textContent=L.my.until?' · '+f(my):''}
+setInterval(tickLuck,1000);
+async function load(){let s;try{const r=await fetch('/api/state');if(!r.ok)throw 0;s=await r.json()}catch(e){if(!S.cases)setTimeout(load,3000);return}S=s;luckAt=Date.now();render();tickLuck();if(S.announce&&S.announce.text&&localStorage.getItem('an')!==S.announce.id){localStorage.setItem('an',S.announce.id);modal(`<div style="text-align:center"><h2 style="font-size:20px">Повідомлення від адміністрації</h2><p style="margin:16px 0;color:var(--mute);line-height:1.5">${esc(S.announce.text)}</p><button class="btn go" onclick="closeModal()">Зрозуміло</button></div>`)}(S.notes||[]).forEach(n=>{if(!n.read&&!shown.has(n.id)){shown.add(n.id);toast(n.text,'ok');snd('good')}})}
 function render(){
   const u=S.me;
   $('me').innerHTML=`<button class="btn o" onclick="muted=!muted;localStorage.setItem('mute',muted?1:0);render()" title="Звук">${muted?`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/></svg>`:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>`}</button>`+(u?`${avaHtml(u,'ava')}<span>${esc(u.name)}</span><b>${Math.round(u.balance)}</b><button class="btn" onclick="openDeposit()">Поповнити</button>`:`<a class="btn" href="/login" onclick="return loginGo()">Увійти через Steam</a>`);
   $('caseGrid').innerHTML=S.cases.map(c=>`<div class="card cc" style="--c:${col(c.tier)}" onclick="showCase('${c.id}')">${crate(c)}<b>${esc(c.name)}</b><small>${c.n} предметів</small><span class="pill">${c.price}</span></div>`).join('');
   $('odds').textContent='Чим дорожчий скін, тим рідше він випадає. Ціна кейса завжди вища за середню вартість предметів усередині. В апгрейдері є шанс 1% на NeonDrop.';
   const inv=S.inventory;
-  $('invTools').innerHTML=inv.length?`<button class="btn o" onclick="sellAll()">Продати все · ${inv.reduce((s,i)=>s+i.price,0)}</button>`:'';
+  $('invTools').innerHTML=inv.length?`<button class="btn o" id="sellAllBtn" onclick="sellAll()">Продати все · ${inv.reduce((s,i)=>s+i.price,0)}</button>`:'';
   $('invGrid').innerHTML=inv.length?inv.map(i=>card(i,`<div class="rb"><button class="btn o" onclick="withdraw(${i.id})">Вивести</button><button class="btn" onclick="sellItem(${i.id})">Продати ${i.price}</button></div>`)).join(''):'<p class="empty">Інвентар порожній. Відкрийте кейс.</p>';
   renderUp(inv);
   const un=(S.notes||[]).filter(n=>!n.read).length;$('badge').textContent=un;$('badge').style.display=un?'inline-block':'none';
@@ -292,13 +321,14 @@ let bonusUI=null,cur=null;
 const cell=i=>`<div class="cell" style="--c:${col(i.rarity)}">${sk(i.name)}<span>${esc(i.name.split(' | ').pop())}</span></div>`;
 function reveal(it,t,neon){modal(`<div class="rev" style="--c:${neon?'#ff2bd6':col(it.rarity)}"><small>${t}</small>${sk(it.name)}<h2>${esc(it.name)}</h2><small>${it.rarity}</small><p class="price">${it.price}</p><div class="rb">${it.inv?`<button class="btn go" style="min-width:0" onclick="sellItem(${it.inv})">Продати за ${it.price}</button><button class="btn o" onclick="closeModal()">Забрати</button>`:`<button class="btn go" onclick="closeModal()">Супер!</button>`}</div></div>`)}
 async function showCase(id){try{const r=await api('/api/case/'+id),c=S.cases.find(x=>x.id===id);cur=id;
-  $('cbig').innerHTML=crate(c);$('ctitle').textContent=r.name;$('cinfo').textContent=r.items.length+' предметів · чим дорожчий скін, тим менший шанс';
+  $('cbig').innerHTML=crate(c,'p');$('ctitle').textContent=r.name;$('cinfo').textContent=r.items.length+' предметів · чим дорожчий скін, тим менший шанс';
   $('copen').textContent='Відкрити за '+r.price;$('copen').onclick=()=>openCase(id);
   const sh=[...r.items].sort(()=>Math.random()-.5),st=$('strip');st.style.transition='none';st.style.transform='translateX(0)';$('roul').classList.remove('done');
   st.innerHTML=Array.from({length:14},(_,i)=>cell(sh[i%sh.length])).join('');
   $('citems').innerHTML=r.items.map(i=>card(i)).join('');showTab('casepage')}catch(e){}}
 async function openCase(id){if(busy)return;busy=true;$('copen').disabled=true;try{
   const r=await api('/api/open',{case:id}),st=$('strip');$('roul').classList.remove('done');
+  const cb=document.querySelector('#cbig .crate'),zz=ms=>new Promise(z=>setTimeout(z,ms));if(cb){cb.classList.add('shake');snd('spinFast');await zz(950);cb.classList.remove('shake');cb.classList.add('open');snd('boom');burst($('cbig'),'#ffffff',26);await zz(700);cb.classList.remove('open')}
   st.style.transition='none';st.style.transform='translateX(0)';st.innerHTML=r.strip.map(cell).join('');
   const w=$('roul').clientWidth;st.offsetWidth;st.style.transition='transform 7s cubic-bezier(.08,.6,.08,1)';st.style.transform=`translateX(-${r.win*140+70-w/2+(Math.random()*80-40)}px)`;
   for(let i=1;i<=40;i++)setTimeout(()=>snd('tick'),7000*(1-Math.pow(1-i/40,2.2)));
@@ -307,8 +337,10 @@ async function openCase(id){if(busy)return;busy=true;$('copen').disabled=true;tr
 async function withdraw(id){try{await api('/api/withdraw',{id});toast('Запит на вивід надіслано','ok');load()}catch(e){if(e.code==='trade'){showTab('profile');setTimeout(()=>$('ptrade')&&$('ptrade').focus(),100)}}}
 let upStake=null,upTgt=null,upPct=50,upTab_='inv',upList=[],upT=null,upDrag=false,upSpd=localStorage.getItem('upSpd')||'slow';
 function setSpd(s){upSpd=s;try{localStorage.setItem('upSpd',s)}catch(e){}$('spF').classList.toggle('on',s==='fast');$('spS').classList.toggle('on',s==='slow')}
-const upChance=()=>+(95*upStake.price/upTgt.price).toFixed(2);
-const wheelChance=()=>upDrag||!(upStake&&upTgt)?+upPct:upChance();
+const lk=()=>{const L=S.luck;if(!L)return 1;const el=Math.floor((Date.now()-luckAt)/1000);return(L.event.left-el>0?L.event.mult:1)*(L.my?L.my.up:1)};
+const baseChance=()=>95*upStake.price/upTgt.price;
+const upChance=()=>Math.min(95,+(baseChance()*lk()).toFixed(2));
+const wheelChance=()=>upDrag||!(upStake&&upTgt)?Math.min(95,+upPct*lk()):upChance();
 const uside=(t,i,e)=>`<div class="us" style="--c:${i?col(i.rarity):'#555'}"><small>${t}</small>${i?`${sk(i.name)}<b>${esc(i.name)}</b><span>${i.price}</span>`:`<p>${e}</p>`}</div>`;
 function renderUp(inv){
   if(upStake&&!inv.find(i=>i.id===upStake.id)){upStake=null;upTgt=null;upList=[]}
@@ -316,7 +348,7 @@ function renderUp(inv){
   $('uStake').innerHTML=uside('Ваша ставка',upStake,'Оберіть свій скін нижче');
   $('uTarget').innerHTML=uside(ok?`Ви отримаєте · x${(upTgt.price/upStake.price).toFixed(2)}`:'Ви отримаєте',upTgt,'Оберіть бажаний шанс або скін');
   $('wimg').innerHTML=upTgt?sk(upTgt.name):'';drawWheel();
-  $('pct').value=ok?Math.round(upChance()):upPct;$('pctv').textContent=wheelChance()+'%';$('pct').style.setProperty('--p',((+$('pct').value-1)/74*100)+'%');$('upInfo').textContent=ok?`x${(upTgt.price/upStake.price).toFixed(2)} · шанс ${upChance()}%`:'';$('spF').classList.toggle('on',upSpd==='fast');$('spS').classList.toggle('on',upSpd==='slow');
+  $('pct').value=ok?Math.round(baseChance()):upPct;$('pctv').textContent=wheelChance()+'%';$('pct').style.setProperty('--p',((+$('pct').value-1)/74*100)+'%');$('upInfo').textContent=ok?`x${(upTgt.price/upStake.price).toFixed(2)} · шанс ${upChance()}%`:'';$('spF').classList.toggle('on',upSpd==='fast');$('spS').classList.toggle('on',upSpd==='slow');
   $('tabInv').classList.toggle('on',upTab_==='inv');$('tabTgt').classList.toggle('on',upTab_==='tgt');$('usearch').style.display=upTab_==='tgt'?'block':'none';
   $('upGrid').innerHTML=upTab_==='inv'
     ?(inv.length?inv.map(i=>`<div onclick="pickStake(${i.id})" style="cursor:pointer">${card(i).replace('class="card"',`class="card ${upStake&&i.id===upStake.id?'sel':''}"`)}</div>`).join(''):'<p class="empty">Немає предметів для апгрейду.</p>')
@@ -331,8 +363,9 @@ function onPct(v){upPct=+v;$('pct').style.setProperty('--p',((+v-1)/74*100)+'%')
 function setPct(v){$('pct').value=v;onPct(v)}
 function onSearch(){clearTimeout(upT);upT=setTimeout(()=>loadTargets(false),300)}
 function setUpTab(t){upTab_=t;if(t==='tgt'&&upStake&&!upList.length)loadTargets(false);else renderUp(S.inventory)}
-async function sellItem(id){try{const r=await api('/api/sell',{id});closeModal();toast('Продано · +'+r.total+' монет','ok');snd('good');load()}catch(e){}}
-async function sellAll(){const ids=S.inventory.map(i=>i.id);if(!ids.length||!confirm('Продати всі предмети ('+ids.length+')?'))return;try{const r=await api('/api/sell',{ids});toast('Продано · +'+r.total+' монет','ok');snd('good');load()}catch(e){}}
+async function sellItem(id){try{const r=await api('/api/sell',{id});closeModal();toast('Продано · +'+r.total+' монет','ok');snd('sell');load()}catch(e){}}
+let sellArm=0;
+async function sellAll(){const ids=S.inventory.map(i=>i.id);if(!ids.length)return;if(!sellArm){sellArm=1;const b=$('sellAllBtn');b.textContent='Підтвердити продаж · '+S.inventory.reduce((s,i)=>s+i.price,0);b.classList.remove('o');b.classList.add('go');setTimeout(()=>{sellArm=0;render()},3500);return}sellArm=0;try{const r=await api('/api/sell',{ids});toast('Продано · +'+r.total+' монет','ok');snd('sell');load()}catch(e){}}
 function drawWheel(){const c=wheelChance(),b=bonusUI,N=b?b.N:0;
   $('wheel').style.background=b?`conic-gradient(#ff2bd6 0,#ffe600 ${N/2}%,#00f0ff ${N}%,#22d3ee ${N}%,#a855f7 ${N+c}%,#1b1830 ${N+c}% 100%)`:`conic-gradient(#22d3ee 0,#a855f7 ${c}%,#1b1830 ${c}% 100%)`;
   $('wch').textContent=b?'NEON x'+b.nm:c+'%'}

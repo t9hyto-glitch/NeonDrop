@@ -1,6 +1,7 @@
+import time
 import telebot
 from telebot import types
-from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
+from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, set_setting, setting, event_luck, wipe_all, backup_now, BK, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
 
 bot = telebot.TeleBot(TOKEN)
 B = types.InlineKeyboardButton
@@ -11,7 +12,9 @@ def menu():
     k.add(B("📊 Статистика", callback_data="st"), B("👥 Гравці", callback_data="us"))
     k.add(B("💳 Поповнення", callback_data="dp"), B("📤 Виводи", callback_data="wd"))
     k.add(B("🎟 Промокоди", callback_data="pr"), B("💰 Баланс гравця", callback_data="bal"))
-    k.add(B("👤 Акаунт за ID", callback_data="acc"), B("📜 Журнал", callback_data="lg"))
+    k.add(B("👤 Акаунт за ID", callback_data="acc"), B("🍀 Удача / івент", callback_data="lk"))
+    k.add(B("📢 Повідомлення всім", callback_data="bc"), B("💾 Бекап", callback_data="bk"))
+    k.add(B("📜 Журнал", callback_data="lg"), B("⚠️ Очистити сайт", callback_data="wp"))
     if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))  # Telegram не приймає http/localhost у кнопках
     return k
 
@@ -55,6 +58,27 @@ def ask(c, text, fn):
 PICK = {}
 
 
+def broadcast(text):  # нотатка кожному гравцю + банер на сайті
+    c = db(); ids = [r[0] for r in c.execute("SELECT id FROM users")]; c.close()
+    for i in ids: add_note(i, text[:300])
+    set_setting("an_text", text[:300]); set_setting("an_id", int(time.time())); return len(ids)
+
+
+def start_event(mult, minutes):
+    set_setting("ev_mult", mult); set_setting("ev_until", time.time() + minutes * 60)
+    broadcast(f"Івент! x{mult:g} удача на {minutes} хв — відкривайте кейси й робіть апгрейди!")
+
+
+def set_luck(uid, t):
+    p = t.replace(",", ".").split()
+    try:
+        if p == ["0"]: lc = lu = 1.0; mn = 0
+        else: lc, lu = (min(5.0, max(1.0, float(x))) for x in p[:2]); mn = int(p[2]) if len(p) > 2 else 0
+    except Exception: return "Формат: КЕЙСИ АПГРЕЙД ХВИЛИНИ, напр. 2 1.5 60"
+    c = db(); c.execute("UPDATE users SET luck_case=?, luck_up=?, luck_until=? WHERE id=?", (lc, lu, time.time() + mn * 60 if mn else 0, uid)); c.commit(); c.close(); add_log(uid, "admin", f"luck {lc}/{lu}")
+    return "🍀 Удачу скинуто" if (lc, lu) == (1.0, 1.0) else f"🍀 Кейси x{lc:g}, апгрейд x{lu:g}, " + (f"{mn} хв" if mn else "без ліміту")
+
+
 def set_user(uid, col, val):  # col — лише фіксовані імена зі списку нижче
     assert col in ("name", "trade_url", "banned", "balance")
     c = db(); c.execute(f"UPDATE users SET {col}=? WHERE id=?", (val, uid)); c.commit(); c.close()
@@ -77,7 +101,8 @@ def show_card(chat, uid):
     k.add(B("🎒 Інвентар", callback_data=f"ui:{uid}"), B("🎁 Видати скін", callback_data=f"ug:{uid}"))
     k.add(B("✏️ Змінити нік", callback_data=f"un:{uid}"), B("✉️ Повідомлення", callback_data=f"um:{uid}"))
     k.add(B("🔗 Скинути трейд-URL", callback_data=f"ut:{uid}"), B("✅ Розбанити" if banned else "🚫 Забанити", callback_data=f"uk:{uid}"))
-    k.add(B("🗑 Видалити акаунт", callback_data=f"ux:{uid}"), B("⬅️ Меню", callback_data="menu"))
+    k.add(B("🍀 Удача акаунта", callback_data=f"ul:{uid}"), B("🗑 Видалити акаунт", callback_data=f"ux:{uid}"))
+    k.add(B("⬅️ Меню", callback_data="menu"))
     bot.send_message(chat, t, reply_markup=k, disable_web_page_preview=True)
 
 
@@ -109,6 +134,7 @@ def acc_op(c, d):  # керування акаунтом гравця
         elif op == "us":
             n = PICK[chat][int(p[1])]; give(uid, n); add_note(uid, f"Адміністратор видав вам скін: {n}"); add_log(uid, "admin", f"give {n}")
             bot.send_message(chat, f"🎁 Видано: {n}"); show_card(chat, uid)
+        elif op == "ul": ask2("🍀 Удача акаунта: КЕЙСИ АПГРЕЙД ХВИЛИНИ\nнапр. 2 1.5 60 (множники 1–5, 0 хв = без ліміту), або 0 — скинути:", lambda t: set_luck(uid, t))
         elif op == "un": ask2("✏️ Новий нік:", lambda t: (set_user(uid, "name", t.strip()[:24]), "✅ Нік змінено")[1])
         elif op == "um": ask2("✉️ Текст повідомлення гравцю (з’явиться в його профілі на сайті):", lambda t: (add_note(uid, t[:300]), "✅ Надіслано")[1])
         elif op == "ut": set_user(uid, "trade_url", ""); bot.send_message(chat, "🔗 Трейд-URL скинуто"); show_card(chat, uid)
@@ -173,6 +199,20 @@ def cb(c):
         edit(c, "🎟 Промокоди (натисніть, щоб видалити):" if rows else "🎟 Промокодів ще немає.", k)
     elif d == "pr_new":
         ask(c, "🎟 " + HELP_PROMO, do_promo)
+    elif d == "bc": ask(c, "📢 Текст повідомлення всім гравцям:", lambda t: f"✅ Надіслано {broadcast(t)} гравцям" if t.strip() else "Порожній текст")
+    elif d == "bk": backup_now(True); bot.send_message(c.message.chat.id, "💾 Бекап: " + BK["state"])
+    elif d == "wp":
+        k = types.InlineKeyboardMarkup(); k.add(B("⚠️ Так, продовжити", callback_data="wp2"), B("Скасувати", callback_data="menu"))
+        bot.send_message(c.message.chat.id, "Це видалить ВСІХ гравців, інвентар, платежі, промокоди й налаштування. Скіни лишаться.", reply_markup=k)
+    elif d == "wp2": ask(c, "Введіть слово ОЧИСТИТИ, щоб стерти все:", lambda t: (wipe_all(), "🧹 Сайт очищено — все з нуля")[1] if t.strip() == "ОЧИСТИТИ" else "Скасовано")
+    elif d == "lk":
+        m, left = event_luck(); k = types.InlineKeyboardMarkup(row_width=2)
+        k.add(B("x2 · 30 хв", callback_data="ev:2:30"), B("x2 · 1 год", callback_data="ev:2:60"), B("x2 · 3 год", callback_data="ev:2:180"), B("x3 · 1 год", callback_data="ev:3:60"))
+        k.add(B("✍️ Свій множник", callback_data="evc"), B("⛔ Зупинити", callback_data="evx")); k.add(B("⬅️ Меню", callback_data="menu"))
+        edit(c, f"🍀 Івент удачі: " + (f"АКТИВНИЙ x{m:g}, лишилось {left // 60} хв" if left else "вимкнено") + "\nМножник збільшує шанс цінних дропів у кейсах і шанс апгрейду для всіх.", k)
+    elif d.startswith("ev:"): _, m, mn = d.split(":"); start_event(float(m), int(mn)); bot.send_message(c.message.chat.id, f"🍀 Запущено x{m} на {mn} хв, гравцям надіслано повідомлення")
+    elif d == "evx": set_setting("ev_until", 0); bot.send_message(c.message.chat.id, "⛔ Івент зупинено")
+    elif d == "evc": ask(c, "Надішліть: МНОЖНИК ХВИЛИНИ (напр. 2 90, множник 1–5):", lambda t: (start_event(min(5.0, max(1.0, float(t.split()[0]))), int(t.split()[1])), "🍀 Запущено")[1] if len(t.split()) == 2 else "Формат: 2 90")
     elif d == "acc":
         m = bot.send_message(c.message.chat.id, "👤 Надішліть ID гравця (число):")
         bot.register_next_step_handler(m, lambda mm: show_card(mm.chat.id, int(mm.text)) if (mm.text or "").strip().isdigit() else bot.send_message(mm.chat.id, "Потрібне число"))
