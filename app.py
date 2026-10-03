@@ -4,7 +4,7 @@ from flask import Flask, request, session, jsonify, render_template, redirect, s
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ---------- Конфіг ----------
-TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAH0gqj8n4ECg84O_HhdwbRirzzKpKf0VMI")  # репозиторій на GitHub має бути PRIVATE; змінна BOT_TOKEN у Render, якщо задана, має пріоритет
+TOKEN = os.getenv("BOT_TOKEN", "")  # токен бота — ТІЛЬКИ у Render → Environment → BOT_TOKEN (у коді на GitHub його тримати не можна: боти-сканери крадуть токени за хвилини)
 ADMINS = [7952645598, 6526861547]
 SITE_URL = (os.getenv("SITE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:5000").rstrip("/")  # публічний https, потрібен для входу через Steam
 SECRET = os.getenv("SECRET", "47093f0947c35dfe127973a6881397b4885bc0bfe2299583")
@@ -72,6 +72,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS images(k TEXT PRIMARY KEY, u TEXT);
     """)
     try: c.execute("ALTER TABLE deposits ADD COLUMN promo TEXT DEFAULT ''")
+    except sqlite3.OperationalError: pass
+    try: c.execute("ALTER TABLE users ADD COLUMN banned INTEGER DEFAULT 0")
     except sqlite3.OperationalError: pass
     if not c.execute("SELECT 1 FROM skins LIMIT 1").fetchone():
         c.executemany("INSERT INTO skins VALUES(?,?,?)", [(n, r, p) for r, l in SEED.items() for n, p in l])
@@ -207,8 +209,9 @@ def me(): return session.get("uid")
 
 def need_auth(f):
     def w(*a, **k):
-        if not me() or not user(me()):  # сесія є, а користувача в БД вже немає (напр. БД перестворена)
-            session.clear(); return jsonify(error="Увійдіть через Steam", code="auth"), 401
+        u = user(me()) if me() else None  # сесія є, а користувача немає (БД перестворена) або його заблоковано
+        if not u or u["banned"]:
+            session.clear(); return jsonify(error="Акаунт заблоковано адміністратором" if u else "Увійдіть через Steam", code="auth"), 401
         return f(*a, **k)
     w.__name__ = f.__name__
     return w
@@ -289,7 +292,9 @@ def auth_steam():
                 name, av = p["personaname"][:24], p["avatarfull"]
             except Exception: pass
         c = db(); c.execute("INSERT OR IGNORE INTO users(steamid,name,avatar) VALUES(?,?,?)", (sid, name, av)); c.commit()
-        session["uid"] = c.execute("SELECT id FROM users WHERE steamid=?", (sid,)).fetchone()["id"]; c.close()
+        r = c.execute("SELECT id,banned FROM users WHERE steamid=?", (sid,)).fetchone(); c.close()
+        if r["banned"]: return redirect("/?banned=1")
+        session["uid"] = r["id"]
     return redirect("/")
 
 
@@ -300,6 +305,7 @@ def logout(): session.clear(); return redirect("/")
 @app.route("/api/state")
 def state():
     uid = me(); u = user(uid) if uid else None
+    if u and u["banned"]: session.clear(); u = None
     return jsonify(
         me=u and {"id": uid, "name": u["name"], "avatar": u["avatar"], "steamid": u["steamid"], "trade_url": u["trade_url"], "balance": u["balance"]},
         inventory=inventory(uid) if u else [], odds=WEIGHTS, notes=notes_of(uid) if u else [], stats=withdraw_stats(uid) if u else None,
@@ -328,10 +334,30 @@ def fetch_images():  # база картинок скінів CS2 (ByMykel/CSGO-
     c = db(); c.executemany("INSERT OR REPLACE INTO images VALUES(?,?)", list(rows.items())); c.commit(); c.close(); load_images(); return len(rows)
 
 
+_STEAM = {"lock": threading.Lock(), "miss": {}}
+
+
+def steam_icon(name):  # запасний варіант: іконка зі Steam Market для скінів, яких немає в базі картинок (по одній за раз)
+    if time.time() - _STEAM["miss"].get(name, 0) < 900 or not _STEAM["lock"].acquire(blocking=False): return None
+    try:
+        r = requests.get("https://steamcommunity.com/market/listings/730/" + quote(name, safe="") + "/render", params={"start": 0, "count": 1, "currency": 1, "format": "json"}, headers={"User-Agent": "Mozilla/5.0"}, timeout=8)
+        url = "https://community.cloudflare.steamstatic.com/economy/image/" + next(iter(r.json()["assets"]["730"]["2"].values()))["icon_url"] + "/360fx360f"
+        c = db(); c.execute("INSERT OR REPLACE INTO images VALUES(?,?)", (img_key(name), url)); c.commit(); c.close(); IMGS[img_key(name)] = url
+        return url
+    except Exception: _STEAM["miss"][name] = time.time(); return None
+    finally: _STEAM["lock"].release()
+
+
+def fill_missing():  # докачує картинки для всіх скінів із кейсів, яких немає в базі
+    for n in sorted({n for v in list(CASES.values()) for n, w in v["items"]}):
+        if img_key(n) not in IMGS: steam_icon(n); time.sleep(4)
+
+
 @app.route("/img")
 def img():
-    n = request.args.get("n", ""); u = IMGS.get(img_key(n)) or "https://cdn.csgo.com/item/" + quote(n, safe="") + "/300.png"
-    r = redirect(u, 302); r.headers["Cache-Control"] = "public, max-age=86400"; return r
+    n = request.args.get("n", ""); u = IMGS.get(img_key(n)) or steam_icon(n)
+    r = redirect(u or "https://cdn.csgo.com/item/" + quote(n, safe="") + "/300.png", 302)
+    r.headers["Cache-Control"] = "public, max-age=86400" if u else "no-cache"; return r
 
 
 @app.route("/api/targets")
@@ -340,8 +366,8 @@ def targets():  # скіни, які можна отримати в апгрей
     except Exception: return jsonify([])
     if sp <= 0: return jsonify([])
     q = (request.args.get("q") or "").lower().split()
-    rows = [(n, v) for n, v in CAT.items() if sp * 95 / 90 <= v[1] <= sp * 95 and all(w in n.lower() for w in q)]
-    if 0 < p <= 90: tp = sp * 95 / p; rows.sort(key=lambda x: abs(x[1][1] - tp))
+    rows = [(n, v) for n, v in CAT.items() if sp * 95 / 75 <= v[1] <= sp * 95 and all(w in n.lower() for w in q)]
+    if 0 < p <= 75: tp = sp * 95 / p; rows.sort(key=lambda x: abs(x[1][1] - tp))
     else: rows.sort(key=lambda x: x[1][1])
     rows = sorted(rows[:40], key=lambda x: x[1][1])
     return jsonify([{"name": n, "rarity": v[0], "price": v[1], "chance": round(95 * sp / v[1], 2)} for n, v in rows])
@@ -391,7 +417,7 @@ def profile():
 def case_info(cid):
     c = CASES.get(cid)
     if not c: return jsonify(error="Кейс не знайдено"), 404
-    return jsonify(name=c["name"], price=c["price"], items=[{"name": n, "rarity": CAT[n][0], "price": CAT[n][1], "chance": round(w * 100, 3)} for n, w in sorted(c["items"], key=lambda x: -CAT[x[0]][1])])
+    return jsonify(name=c["name"], price=c["price"], items=[{"name": n, "rarity": CAT[n][0], "price": CAT[n][1]} for n, w in sorted(c["items"], key=lambda x: -CAT[x[0]][1])])
 
 
 @app.route("/api/notes/read", methods=["POST"])
@@ -424,7 +450,7 @@ def upgrade():
     c = db(); r = c.execute("SELECT item FROM inv WHERE id=? AND uid=? AND status='own'", (d.get("id"), uid)).fetchone()
     if not r or r["item"] not in CAT: c.close(); return jsonify(error="Предмет не знайдено"), 400
     src = r["item"]; sp, tp = CAT[src][1], CAT[tgt][1]; chance = round(95 * sp / tp, 2)
-    if not 1 <= chance <= 90: c.close(); return jsonify(error="Шанс має бути від 1% до 90%"), 400
+    if not 1 <= chance <= 75: c.close(); return jsonify(error="Шанс має бути від 1% до 75%"), 400
     if not c.execute("UPDATE inv SET status='used' WHERE id=? AND status='own'", (d["id"],)).rowcount: c.close(); return jsonify(error="Предмет не знайдено"), 400
     c.commit(); c.close()
     roll = random.uniform(0, 100)
@@ -475,8 +501,15 @@ def withdraw():
 init_db(); load_cat(); load_images()
 
 
-def _bg():  # фонові задачі при старті: скіни, картинки, Telegram-бот (працює з будь-якою Start Command)
-    time.sleep(8)  # даємо сайту спокійно піднятися, важкі задачі — після старту
+def _bg():  # фонові задачі при старті: Telegram-бот (першим!), скіни, картинки (працює з будь-якою Start Command)
+    time.sleep(5)
+    if not TOKEN: print("BOT_TOKEN не задано — бот вимкнено")
+    else:
+        try:
+            import bot as tgbot
+            if SITE_URL.startswith("https://"): ensure_webhook(True); print("webhook:", WH["state"])
+            else: threading.Thread(target=lambda: (tgbot.bot.remove_webhook(), tgbot.bot.infinity_polling(skip_pending=True)), daemon=True).start()
+        except Exception as e: print("bot error:", e)
     try:
         c = db(); n = c.execute("SELECT COUNT(*) FROM skins").fetchone()[0]; c.close()
         if n < 200:
@@ -486,12 +519,9 @@ def _bg():  # фонові задачі при старті: скіни, кар�
     try:
         if len(IMGS) < 1000: print("images loaded:", fetch_images())
     except Exception as e: print("images failed:", e)
-    if not TOKEN: print("BOT_TOKEN не задано — бот вимкнено"); return
-    try:
-        import bot as tgbot
-        if SITE_URL.startswith("https://"): ensure_webhook(True); print("webhook:", WH["state"])
-        else: tgbot.bot.remove_webhook(); tgbot.bot.infinity_polling(skip_pending=True)
-    except Exception as e: print("bot error:", e)
+    try: fill_missing()
+    except Exception as e: print("fill_missing failed:", e)
+    while TOKEN and SITE_URL.startswith("https://"): time.sleep(300); ensure_webhook()  # сторожок: якщо webhook збили — ставимо назад
 
 
 if not os.environ.get("ND_STARTED") and not os.environ.get("ND_NO_BG"):

@@ -1,6 +1,6 @@
 import telebot
 from telebot import types
-from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, adjust_balance, promo_save, promo_del, promos_list, release_promo
+from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
 
 bot = telebot.TeleBot(TOKEN)
 B = types.InlineKeyboardButton
@@ -11,8 +11,8 @@ def menu():
     k.add(B("📊 Статистика", callback_data="st"), B("👥 Гравці", callback_data="us"))
     k.add(B("💳 Поповнення", callback_data="dp"), B("📤 Виводи", callback_data="wd"))
     k.add(B("🎟 Промокоди", callback_data="pr"), B("💰 Баланс гравця", callback_data="bal"))
-    k.add(B("📜 Журнал", callback_data="lg"))
-    if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))
+    k.add(B("👤 Акаунт за ID", callback_data="acc"), B("📜 Журнал", callback_data="lg"))
+    if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))  # Telegram не приймає http/localhost у кнопках
     return k
 
 
@@ -52,8 +52,81 @@ def ask(c, text, fn):
     m = bot.send_message(c.message.chat.id, text); bot.register_next_step_handler(m, lambda mm: bot.send_message(mm.chat.id, fn(mm.text)))
 
 
+PICK = {}
+
+
+def set_user(uid, col, val):  # col — лише фіксовані імена зі списку нижче
+    assert col in ("name", "trade_url", "banned", "balance")
+    c = db(); c.execute(f"UPDATE users SET {col}=? WHERE id=?", (val, uid)); c.commit(); c.close()
+
+
+def card(uid):
+    c = db(); u = c.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+    if not u: c.close(); return None, 0
+    n = c.execute("SELECT COUNT(*) FROM inv WHERE uid=? AND status='own'", (uid,)).fetchone()[0]
+    dep = c.execute("SELECT COALESCE(SUM(uah),0) FROM deposits WHERE uid=? AND status='paid'", (uid,)).fetchone()[0]
+    wd = [r[0] for r in c.execute("SELECT item FROM inv WHERE uid=? AND status='withdrawn'", (uid,))]; c.close()
+    return (f"👤 ID {uid} · {u['name']}{' · 🚫 ЗАБЛОКОВАНО' if u['banned'] else ''}\nSteam: https://steamcommunity.com/profiles/{u['steamid']}\n💰 Баланс: {u['balance']:.0f}\n🎒 Предметів: {n}\n💳 Поповнено: {dep:.0f} UAH\n📤 Виведено: {len(wd)} шт. на {sum(CAT[i][1] for i in wd if i in CAT)}\n🔗 Трейд: {u['trade_url'] or '—'}"), u["banned"]
+
+
+def show_card(chat, uid):
+    t, banned = card(uid)
+    if not t: return bot.send_message(chat, "Гравця з таким ID немає")
+    k = types.InlineKeyboardMarkup(row_width=2)
+    k.add(B("💰 Баланс ±", callback_data=f"ub:{uid}"), B("🧹 Обнулити баланс", callback_data=f"uz:{uid}"))
+    k.add(B("🎒 Інвентар", callback_data=f"ui:{uid}"), B("🎁 Видати скін", callback_data=f"ug:{uid}"))
+    k.add(B("✏️ Змінити нік", callback_data=f"un:{uid}"), B("✉️ Повідомлення", callback_data=f"um:{uid}"))
+    k.add(B("🔗 Скинути трейд-URL", callback_data=f"ut:{uid}"), B("✅ Розбанити" if banned else "🚫 Забанити", callback_data=f"uk:{uid}"))
+    k.add(B("🗑 Видалити акаунт", callback_data=f"ux:{uid}"), B("⬅️ Меню", callback_data="menu"))
+    bot.send_message(chat, t, reply_markup=k, disable_web_page_preview=True)
+
+
+def acc_op(c, d):  # керування акаунтом гравця
+    op, _, rest = d.partition(":"); p = rest.split(":"); uid = int(p[0]); chat = c.message.chat.id; con = db()
+    def ask2(text, fn):
+        m = bot.send_message(chat, text); bot.register_next_step_handler(m, lambda mm: (bot.send_message(chat, fn(mm.text or "")), show_card(chat, uid)))
+    try:
+        if op == "u": show_card(chat, uid)
+        elif op == "ub": ask2("💰 Сума (мінус — забрати), напр. 500 або -300:", lambda t: do_balance(f"{uid} {t.strip()}"))
+        elif op == "uz": set_user(uid, "balance", 0); add_log(uid, "admin", "balance=0"); bot.send_message(chat, "🧹 Баланс обнулено"); show_card(chat, uid)
+        elif op == "ui":
+            rows = con.execute("SELECT id,item FROM inv WHERE uid=? AND status='own' ORDER BY id DESC LIMIT 25", (uid,)).fetchall()
+            k = types.InlineKeyboardMarkup(row_width=1)
+            for r in rows: k.add(B(f"🗑 {r['item'][:40]} · {CAT.get(r['item'], ('', 0))[1]}", callback_data=f"ud:{uid}:{r['id']}"))
+            k.add(B("⬅️ Картка", callback_data=f"u:{uid}"))
+            bot.send_message(chat, "🎒 Інвентар (натисніть, щоб видалити предмет):" if rows else "🎒 Інвентар порожній.", reply_markup=k)
+        elif op == "ud":
+            con.execute("UPDATE inv SET status='removed' WHERE id=? AND uid=? AND status='own'", (int(p[1]), uid)); con.commit(); add_log(uid, "admin", f"remove item {p[1]}")
+            acc_op(c, f"ui:{uid}")
+        elif op == "ug":
+            def find(t):
+                w = t.lower().split(); res = [n for n in CAT if w and all(x in n.lower() for x in w)][:8]
+                if not res: return bot.send_message(chat, "Нічого не знайдено")
+                PICK[chat] = res; k = types.InlineKeyboardMarkup(row_width=1)
+                for i, n in enumerate(res): k.add(B(f"{n[:45]} · {CAT[n][1]}", callback_data=f"us:{uid}:{i}"))
+                bot.send_message(chat, "🎁 Оберіть скін:", reply_markup=k)
+            m = bot.send_message(chat, "🎁 Введіть частину назви скіна (напр. redline ft):"); bot.register_next_step_handler(m, lambda mm: find(mm.text or ""))
+        elif op == "us":
+            n = PICK[chat][int(p[1])]; give(uid, n); add_note(uid, f"Адміністратор видав вам скін: {n}"); add_log(uid, "admin", f"give {n}")
+            bot.send_message(chat, f"🎁 Видано: {n}"); show_card(chat, uid)
+        elif op == "un": ask2("✏️ Новий нік:", lambda t: (set_user(uid, "name", t.strip()[:24]), "✅ Нік змінено")[1])
+        elif op == "um": ask2("✉️ Текст повідомлення гравцю (з’явиться в його профілі на сайті):", lambda t: (add_note(uid, t[:300]), "✅ Надіслано")[1])
+        elif op == "ut": set_user(uid, "trade_url", ""); bot.send_message(chat, "🔗 Трейд-URL скинуто"); show_card(chat, uid)
+        elif op == "uk":
+            was = con.execute("SELECT banned FROM users WHERE id=?", (uid,)).fetchone()[0]; set_user(uid, "banned", 0 if was else 1); add_log(uid, "admin", "unban" if was else "ban"); show_card(chat, uid)
+        elif op == "ux":
+            k = types.InlineKeyboardMarkup(); k.add(B("⚠️ Так, видалити", callback_data=f"uxc:{uid}"), B("Скасувати", callback_data=f"u:{uid}"))
+            bot.send_message(chat, f"Видалити акаунт ID {uid} разом з інвентарем? Це незворотно.", reply_markup=k)
+        elif op == "uxc":
+            for q in ("DELETE FROM users WHERE id=?", "DELETE FROM inv WHERE uid=?", "DELETE FROM notes WHERE uid=?"): con.execute(q, (uid,))
+            con.commit(); add_log(uid, "admin", "delete account"); bot.send_message(chat, f"🗑 Акаунт ID {uid} видалено")
+    except Exception as e: bot.send_message(chat, f"Помилка: {e}")
+    finally: con.close()
+
+
 @bot.message_handler(func=lambda m: True)
 def any_msg(m):
+    if m.from_user.id in ADMINS and (m.text or "").strip().isdigit(): return show_card(m.chat.id, int(m.text))  # просто надішліть ID гравця
     if m.from_user.id in ADMINS:
         bot.send_message(m.chat.id, "🔐 NeonDrop — адмін-панель", reply_markup=menu())
     else:
@@ -72,9 +145,6 @@ def edit(c, text, kb):
 def cb(c):
     if c.from_user.id not in ADMINS:
         return bot.answer_callback_query(c.id, "Немає доступу", show_alert=True)
-    
-    bot.answer_callback_query(c.id)  # Снимает анимацию ожидания с кнопки Telegram
-    
     d = c.data; con = db()
     if d == "menu":
         edit(c, "🔐 NeonDrop — адмін-панель", menu())
@@ -86,7 +156,9 @@ def cb(c):
         edit(c, f"📊 Гравців: {u['n']}\nСума балансів: {u['s']:.0f}\nПідтверджено поповнень: {t:.0f} UAH\nОчікують поповнення: {p}\nЗапитів на вивід: {w}", back())
     elif d == "us":
         rows = con.execute("SELECT id,name,steamid,balance FROM users ORDER BY balance DESC LIMIT 15").fetchall()
-        edit(c, "👥 Топ за балансом:\n" + "\n".join(f"ID {r['id']} {r['name']} — {r['balance']:.0f}\nsteamcommunity.com/profiles/{r['steamid']}" for r in rows) if rows else "Гравців ще немає.", back())
+        k = types.InlineKeyboardMarkup(row_width=1)
+        for r in rows: k.add(B(f"ID {r['id']} · {r['name']} · {r['balance']:.0f}", callback_data=f"u:{r['id']}"))
+        k.add(B("⬅️ Меню", callback_data="menu")); edit(c, "👥 Топ за балансом (натисніть — відкрити акаунт):" if rows else "Гравців ще немає.", k)
     elif d == "lg":
         rows = con.execute("SELECT uid,kind,info,ts FROM log ORDER BY id DESC LIMIT 15").fetchall()
         edit(c, "📜 Журнал:\n" + "\n".join(f"{r['ts'][5:16]} #{r['uid']} {r['kind']}: {r['info']}" for r in rows) if rows else "Порожньо.", back())
@@ -101,6 +173,11 @@ def cb(c):
         edit(c, "🎟 Промокоди (натисніть, щоб видалити):" if rows else "🎟 Промокодів ще немає.", k)
     elif d == "pr_new":
         ask(c, "🎟 " + HELP_PROMO, do_promo)
+    elif d == "acc":
+        m = bot.send_message(c.message.chat.id, "👤 Надішліть ID гравця (число):")
+        bot.register_next_step_handler(m, lambda mm: show_card(mm.chat.id, int(mm.text)) if (mm.text or "").strip().isdigit() else bot.send_message(mm.chat.id, "Потрібне число"))
+    elif d[:1] == "u" and ":" in d:
+        acc_op(c, d)
     elif d == "dp":
         rows = con.execute("SELECT * FROM deposits WHERE status='pending' ORDER BY id LIMIT 10").fetchall()
         edit(c, f"💳 Очікують підтвердження: {len(rows)}", back())
@@ -126,7 +203,7 @@ def cb(c):
     elif d.startswith("wd_ok:"):
         cur = con.execute("UPDATE inv SET status='withdrawn' WHERE id=? AND status='withdraw'", (int(d[6:]),)); con.commit()
         bot.edit_message_text(f"{c.message.text}\n\n{'✅ Виконано' if cur.rowcount else 'Вже оброблено'}", c.message.chat.id, c.message.message_id)
-    con.close()
+    con.close(); bot.answer_callback_query(c.id)
 
 
 if __name__ == "__main__":
