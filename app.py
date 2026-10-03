@@ -1,10 +1,10 @@
-import os, re, random, sqlite3, requests, hashlib, threading
+import os, re, random, sqlite3, requests, hashlib, threading, time, bisect
 from urllib.parse import urlencode, quote
 from flask import Flask, request, session, jsonify, render_template, redirect, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 # ---------- Конфіг ----------
-TOKEN = os.getenv("BOT_TOKEN", "")  # токен бота — ТІЛЬКИ у змінній середовища Render (Environment → BOT_TOKEN)
+TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAH0gqj8n4ECg84O_HhdwbRirzzKpKf0VMI")  # репозиторій на GitHub має бути PRIVATE; змінна BOT_TOKEN у Render, якщо задана, має пріоритет
 ADMINS = [7952645598, 6526861547]
 SITE_URL = (os.getenv("SITE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:5000").rstrip("/")  # публічний https, потрібен для входу через Steam
 SECRET = os.getenv("SECRET", "47093f0947c35dfe127973a6881397b4885bc0bfe2299583")
@@ -81,10 +81,11 @@ def init_db():
 def load_cat():
     c = db(); cat = {r["name"]: (r["rarity"], r["price"]) for r in c.execute("SELECT * FROM skins")}; c.close()
     CAT.clear(); CAT.update(cat); new_cases = {}  # кейси збираємо окремо й підміняємо разом — сайт не ламається під час перезавантаження каталогу
+    srt = sorted(cat, key=lambda n: cat[n][1]); prices = [cat[n][1] for n in srt]  # один раз сортуємо (безкоштовний Render має дуже слабкий CPU)
     for cid, name, price, kw in CASE_DEFS:
-        band = lambda f: sorted((n for n, (r, p) in CAT.items() if price * .1 <= p <= price * 40 and f(n)), key=lambda n: CAT[n][1])
-        names = band(lambda n: not kw or any(k in n for k in kw))
-        if len(names) < 6: names = band(lambda n: True) or sorted(CAT, key=lambda n: CAT[n][1])
+        sl = srt[bisect.bisect_left(prices, price * .1):bisect.bisect_right(prices, price * 40)]
+        names = [n for n in sl if not kw or any(k in n for k in kw)]
+        if len(names) < 6: names = sl or srt
         if len(names) > 30: names = [names[round(i * (len(names) - 1) / 29)] for i in range(30)]
         ps = [CAT[n][1] for n in names]; target = price * .87
         def ev(x): w = [p ** -x for p in ps]; return sum(p * q for p, q in zip(ps, w)) / sum(w)
@@ -221,7 +222,23 @@ def index():
 
 
 @app.route("/health")
-def health(): return f"ok images={len(IMGS)} skins={len(CAT)} bot={'on' if TOKEN else 'no token'}"
+def health():  # його ж можна пінгувати (UptimeRobot), щоб Render не засинав; заодно сам лагодить webhook бота
+    threading.Thread(target=ensure_webhook, daemon=True).start()
+    return f"ok images={len(IMGS)} skins={len(CAT)} bot={'on' if TOKEN else 'NO TOKEN'} webhook={WH['state']}"
+
+
+WH = {"state": "n/a", "t": 0}
+
+
+def ensure_webhook(force=False):  # перевіряє, що Telegram шле оновлення саме на наш сайт; якщо ні — ставить заново
+    if not TOKEN or not SITE_URL.startswith("https://") or (not force and time.time() - WH["t"] < 300): return
+    WH["t"] = time.time()
+    try:
+        import bot as tgbot
+        want = f"{SITE_URL}/tg/{_tgkey()}"
+        if tgbot.bot.get_webhook_info().url != want: tgbot.bot.set_webhook(url=want); WH["state"] = "reset"
+        else: WH["state"] = "ok"
+    except Exception as e: WH["state"] = "error: " + str(e)[:80]
 
 
 def _tgkey(): return hashlib.sha256(TOKEN.encode()).hexdigest()[:32]
@@ -459,6 +476,7 @@ init_db(); load_cat(); load_images()
 
 
 def _bg():  # фонові задачі при старті: скіни, картинки, Telegram-бот (працює з будь-якою Start Command)
+    time.sleep(8)  # даємо сайту спокійно піднятися, важкі задачі — після старту
     try:
         c = db(); n = c.execute("SELECT COUNT(*) FROM skins").fetchone()[0]; c.close()
         if n < 200:
@@ -471,7 +489,7 @@ def _bg():  # фонові задачі при старті: скіни, кар�
     if not TOKEN: print("BOT_TOKEN не задано — бот вимкнено"); return
     try:
         import bot as tgbot
-        if SITE_URL.startswith("https://"): print("webhook set:", tgbot.bot.set_webhook(url=f"{SITE_URL}/tg/{_tgkey()}"))
+        if SITE_URL.startswith("https://"): ensure_webhook(True); print("webhook:", WH["state"])
         else: tgbot.bot.remove_webhook(); tgbot.bot.infinity_polling(skip_pending=True)
     except Exception as e: print("bot error:", e)
 
