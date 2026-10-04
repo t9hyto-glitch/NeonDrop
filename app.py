@@ -20,7 +20,7 @@ TRADE_RE = re.compile(r"^https://steamcommunity\.com/tradeoffer/new/\?partner=\d
 app = Flask(__name__)
 app.secret_key = SECRET
 app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1, x_host=1)  # Render стоїть за проксі
-app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=SITE_URL.startswith("https://"), PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 30)
+app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SECURE=SITE_URL.startswith("https://"), PERMANENT_SESSION_LIFETIME=60 * 60 * 24 * 365)
 
 SEED = {
     "Mil-Spec": [("P250 | Sand Dune", 15), ("MP9 | Storm", 20), ("Nova | Predator", 25), ("SG 553 | Damascus Steel", 35), ("Glock-18 | Sand Dune", 18)],
@@ -231,7 +231,12 @@ def luck_for(uid):
 def wipe_all():  # повне очищення сайту (скіни й картинки лишаються)
     c = db()
     for t in ("users", "inv", "deposits", "notes", "log", "drops", "promos", "promo_uses", "settings"): c.execute("DELETE FROM " + t)
-    c.commit(); c.close(); BK["allow_empty"] = True; backup_now(True)
+    c.commit(); c.close()
+    old = BK["mid"]; BK["mid"] = None; BK["allow_empty"] = True; backup_now(True)  # нове закріплене повідомлення з ПОРОЖНЬОЮ БД
+    if TOKEN and old and BK["mid"] != old:  # старий бекап з даними відкріплюємо й видаляємо
+        for m in ("unpinChatMessage", "deleteMessage"):
+            try: tg(m, chat_id=_bk_chat(), message_id=old)
+            except Exception: pass
 
 
 TG = "https://api.telegram.org"
@@ -384,7 +389,7 @@ def state():
     if u and u["banned"]: session.clear(); u = None
     ev = event_luck(); lc, lu, lt = luck_user(uid) if u else (1.0, 1.0, 0); an = setting("an_id", "0")
     return jsonify(
-        luck=dict(event=dict(mult=ev[0], left=ev[1]), my=(dict(case=lc, up=lu, until=lt) if (lc, lu) != (1.0, 1.0) else None)),
+        luck=dict(event=dict(mult=ev[0], left=ev[1]), my=None),
         announce=dict(id=an, text=setting("an_text", "")) if time.time() - float(an) < 86400 else None,
         me=u and {"id": uid, "name": u["name"], "avatar": u["avatar"], "steamid": u["steamid"], "trade_url": u["trade_url"], "balance": u["balance"]},
         inventory=inventory(uid) if u else [], odds=WEIGHTS, notes=notes_of(uid) if u else [], stats=withdraw_stats(uid) if u else None,
@@ -445,7 +450,7 @@ def targets():  # скіни, які можна отримати в апгрей
     except Exception: return jsonify([])
     if sp <= 0: return jsonify([])
     q = (request.args.get("q") or "").lower().split()
-    rows = [(n, v) for n, v in CAT.items() if sp * 95 / 75 <= v[1] <= sp * 95 and all(w in n.lower() for w in q)]
+    rows = [(n, v) for n, v in CAT.items() if sp * 95 / 75 <= v[1] <= sp * 950 and all(w in n.lower() for w in q)]
     if 0 < p <= 75: tp = sp * 95 / p; rows.sort(key=lambda x: abs(x[1][1] - tp))
     else: rows.sort(key=lambda x: x[1][1])
     rows = sorted(rows[:40], key=lambda x: x[1][1])
@@ -509,16 +514,21 @@ def notes_read():
 @app.route("/api/open", methods=["POST"])
 @need_auth
 def open_case():
-    uid = me(); case = CASES.get((request.json or {}).get("case"))
+    uid = me(); d = request.json or {}; case = CASES.get(d.get("case"))
     if not case: return jsonify(error="Кейс не знайдено"), 400
-    if not spend(uid, case["price"]): return jsonify(error="Недостатньо балансу. Поповніть рахунок."), 400
-    win = roll_item(case, luck_for(uid)[0]); inv_id = give(uid, win)
-    if CAT[win][1] >= max(150, case["price"] * 3):  # крутий дроп → у стрічку зліва (з затримкою, щоб не спойлерити анімацію)
-        c = db(); c.execute("INSERT INTO drops(uid,item,case_name,price,show_at) VALUES(?,?,?,?,datetime('now','+9 seconds'))", (uid, win, case["name"], CAT[win][1])); c.commit(); c.close()
-    strip = [roll_item(case) for _ in range(60)]; strip[50] = win
-    add_log(uid, "case", f"{case['name']} -> {win}")
-    notify(f"📦 Кейс\n{who(uid)}\n{case['name']} ({case['price']})\nВипало: {win} [{CAT[win][0]}, {CAT[win][1]}]")
-    return jsonify(strip=[{"name": n, "rarity": CAT[n][0], "price": CAT[n][1]} for n in strip], win=50, inv=inv_id)
+    try: n = max(1, min(5, int(d.get("count") or 1)))  # до 5 кейсів за раз
+    except Exception: n = 1
+    if not spend(uid, case["price"] * n): return jsonify(error="Недостатньо балансу. Поповніть рахунок."), 400
+    luck = luck_for(uid)[0]; opens = []
+    for _ in range(n):
+        win = roll_item(case, luck); inv_id = give(uid, win)
+        if CAT[win][1] >= max(150, case["price"] * 3):  # крутий дроп → у стрічку зліва (з затримкою, щоб не спойлерити анімацію)
+            c = db(); c.execute("INSERT INTO drops(uid,item,case_name,price,show_at) VALUES(?,?,?,?,datetime('now','+9 seconds'))", (uid, win, case["name"], CAT[win][1])); c.commit(); c.close()
+        strip = [roll_item(case) for _ in range(60)]; strip[50] = win
+        opens.append(dict(strip=[{"name": x, "rarity": CAT[x][0], "price": CAT[x][1]} for x in strip], win=50, inv=inv_id))
+        add_log(uid, "case", f"{case['name']} -> {win}")
+    notify(f"📦 Кейс x{n}\n{who(uid)}\n{case['name']} ({case['price']})\n" + "\n".join(f"{o['strip'][50]['name']} [{o['strip'][50]['price']}]" for o in opens))
+    return jsonify(opens=opens, strip=opens[0]["strip"], win=50, inv=opens[0]["inv"])
 
 
 @app.route("/api/upgrade", methods=["POST"])
@@ -529,17 +539,19 @@ def upgrade():
     c = db(); r = c.execute("SELECT item FROM inv WHERE id=? AND uid=? AND status='own'", (d.get("id"), uid)).fetchone()
     if not r or r["item"] not in CAT: c.close(); return jsonify(error="Предмет не знайдено"), 400
     src = r["item"]; sp, tp = CAT[src][1], CAT[tgt][1]; chance = round(95 * sp / tp, 2)
-    if not 1 <= chance <= 75: c.close(); return jsonify(error="Шанс має бути від 1% до 75%"), 400
+    if not 0.1 <= chance <= 75: c.close(); return jsonify(error="Шанс має бути від 0.1% до 75%"), 400
     if not c.execute("UPDATE inv SET status='used' WHERE id=? AND status='own'", (d["id"],)).rowcount: c.close(); return jsonify(error="Предмет не знайдено"), 400
     c.commit(); c.close()
     roll = random.uniform(0, 100); eff = min(95.0, chance * luck_for(uid)[1])  # персональна/івентова удача
     bonus = random.random() < 0.01; nm = random.choice((2, 3)) if bonus else 1; N = 10 if bonus else 0  # NeonDrop: 1% шанс, неоновий сектор 10% колеса
-    neon = bonus and roll < N; won = neon or N <= roll < N + eff; prize = None; inv_id = None
+    neon = bonus and roll < N; won = neon or N <= roll < N + eff
+    vis = roll if neon else random.uniform(N, N + chance) if won else random.uniform(N + chance, 100)  # стрілка завжди збігається з результатом, а видимий шанс — звичайний (без множника)
+    prize = None; inv_id = None
     if won:
         prize = min(CAT, key=lambda n: abs(CAT[n][1] - tp * nm)) if neon else tgt; inv_id = give(uid, prize)
     add_log(uid, "upgrade", f"{src} -> {tgt} ({chance}%){' NEON x' + str(nm) if bonus else ''}: {prize or 'програш'}")
     notify(f"⚡ Апгрейд\n{who(uid)}\n{src} → {tgt} (шанс {chance}%){' ⚡NEONDROP x' + str(nm) if bonus else ''}\n{'ВИГРАШ → ' + prize if won else 'Програш'}")
-    return jsonify(won=won, roll=roll, chance=round(eff, 2), prize=prize, bonus=bonus, neon=neon, nm=nm, N=N, rarity=prize and CAT[prize][0], price=prize and CAT[prize][1], inv=inv_id)
+    return jsonify(won=won, roll=vis, chance=round(chance, 2), prize=prize, bonus=bonus, neon=neon, nm=nm, N=N, rarity=prize and CAT[prize][0], price=prize and CAT[prize][1], inv=inv_id)
 
 
 @app.route("/api/deposit", methods=["POST"])
@@ -579,8 +591,8 @@ def withdraw():
 
 if TOKEN and not os.environ.get("ND_NO_BG"):  # новий інстанс Render: порожня/відсутня БД → відновлюємо з Telegram
     fresh = not os.path.exists(DB)
-    if not fresh:
-        try: _c = sqlite3.connect(DB); fresh = _c.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0; _c.close()
+    if not fresh:  # БД з таблицею гравців (навіть порожньою після «Очистити сайт») НЕ чіпаємо — інакше поверталися б старі дані
+        try: _c = sqlite3.connect(DB); _c.execute("SELECT 1 FROM users LIMIT 1"); _c.close()
         except Exception: fresh = True
     if fresh: restore_backup()
 init_db(); load_cat(); load_images()

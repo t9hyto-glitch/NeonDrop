@@ -73,7 +73,7 @@ def set_luck(uid, t):
     p = t.replace(",", ".").split()
     try:
         if p == ["0"]: lc = lu = 1.0; mn = 0
-        else: lc, lu = (min(5.0, max(1.0, float(x))) for x in p[:2]); mn = int(p[2]) if len(p) > 2 else 0
+        else: lc, lu = (min(1000.0, max(1.0, float(x))) for x in p[:2]); mn = int(p[2]) if len(p) > 2 else 0
     except Exception: return "Формат: КЕЙСИ АПГРЕЙД ХВИЛИНИ, напр. 2 1.5 60"
     c = db(); c.execute("UPDATE users SET luck_case=?, luck_up=?, luck_until=? WHERE id=?", (lc, lu, time.time() + mn * 60 if mn else 0, uid)); c.commit(); c.close(); add_log(uid, "admin", f"luck {lc}/{lu}")
     return "🍀 Удачу скинуто" if (lc, lu) == (1.0, 1.0) else f"🍀 Кейси x{lc:g}, апгрейд x{lu:g}, " + (f"{mn} хв" if mn else "без ліміту")
@@ -134,7 +134,7 @@ def acc_op(c, d):  # керування акаунтом гравця
         elif op == "us":
             n = PICK[chat][int(p[1])]; give(uid, n); add_note(uid, f"Адміністратор видав вам скін: {n}"); add_log(uid, "admin", f"give {n}")
             bot.send_message(chat, f"🎁 Видано: {n}"); show_card(chat, uid)
-        elif op == "ul": ask2("🍀 Удача акаунта: КЕЙСИ АПГРЕЙД ХВИЛИНИ\nнапр. 2 1.5 60 (множники 1–5, 0 хв = без ліміту), або 0 — скинути:", lambda t: set_luck(uid, t))
+        elif op == "ul": ask2("🍀 Удача акаунта: КЕЙСИ АПГРЕЙД ХВИЛИНИ\nнапр. 2 1.5 60 (множники 1–1000, 0 хв = без ліміту), або 0 — скинути:", lambda t: set_luck(uid, t))
         elif op == "un": ask2("✏️ Новий нік:", lambda t: (set_user(uid, "name", t.strip()[:24]), "✅ Нік змінено")[1])
         elif op == "um": ask2("✉️ Текст повідомлення гравцю (з’явиться в його профілі на сайті):", lambda t: (add_note(uid, t[:300]), "✅ Надіслано")[1])
         elif op == "ut": set_user(uid, "trade_url", ""); bot.send_message(chat, "🔗 Трейд-URL скинуто"); show_card(chat, uid)
@@ -204,7 +204,7 @@ def cb(c):
     elif d == "wp":
         k = types.InlineKeyboardMarkup(); k.add(B("⚠️ Так, продовжити", callback_data="wp2"), B("Скасувати", callback_data="menu"))
         bot.send_message(c.message.chat.id, "Це видалить ВСІХ гравців, інвентар, платежі, промокоди й налаштування. Скіни лишаться.", reply_markup=k)
-    elif d == "wp2": ask(c, "Введіть слово ОЧИСТИТИ, щоб стерти все:", lambda t: (wipe_all(), "🧹 Сайт очищено — все з нуля")[1] if t.strip() == "ОЧИСТИТИ" else "Скасовано")
+    elif d == "wp2": ask(c, "Введіть слово ОЧИСТИТИ, щоб стерти все:", lambda t: (wipe_all(), "🧹 Сайт очищено — все з нуля.\nБекап: " + BK["state"] + ("" if BK["state"].startswith("ok") else "\n⚠️ Бекап не оновився — після перезапуску можуть повернутися старі дані!"))[1] if t.strip() == "ОЧИСТИТИ" else "Скасовано")
     elif d == "lk":
         m, left = event_luck(); k = types.InlineKeyboardMarkup(row_width=2)
         k.add(B("x2 · 30 хв", callback_data="ev:2:30"), B("x2 · 1 год", callback_data="ev:2:60"), B("x2 · 3 год", callback_data="ev:2:180"), B("x3 · 1 год", callback_data="ev:3:60"))
@@ -212,7 +212,7 @@ def cb(c):
         edit(c, f"🍀 Івент удачі: " + (f"АКТИВНИЙ x{m:g}, лишилось {left // 60} хв" if left else "вимкнено") + "\nМножник збільшує шанс цінних дропів у кейсах і шанс апгрейду для всіх.", k)
     elif d.startswith("ev:"): _, m, mn = d.split(":"); start_event(float(m), int(mn)); bot.send_message(c.message.chat.id, f"🍀 Запущено x{m} на {mn} хв, гравцям надіслано повідомлення")
     elif d == "evx": set_setting("ev_until", 0); bot.send_message(c.message.chat.id, "⛔ Івент зупинено")
-    elif d == "evc": ask(c, "Надішліть: МНОЖНИК ХВИЛИНИ (напр. 2 90, множник 1–5):", lambda t: (start_event(min(5.0, max(1.0, float(t.split()[0]))), int(t.split()[1])), "🍀 Запущено")[1] if len(t.split()) == 2 else "Формат: 2 90")
+    elif d == "evc": ask(c, "Надішліть: МНОЖНИК ХВИЛИНИ (напр. 2 90, множник 1–1000):", lambda t: (start_event(min(1000.0, max(1.0, float(t.split()[0]))), int(t.split()[1])), "🍀 Запущено")[1] if len(t.split()) == 2 else "Формат: 2 90")
     elif d == "acc":
         m = bot.send_message(c.message.chat.id, "👤 Надішліть ID гравця (число):")
         bot.register_next_step_handler(m, lambda mm: show_card(mm.chat.id, int(mm.text)) if (mm.text or "").strip().isdigit() else bot.send_message(mm.chat.id, "Потрібне число"))

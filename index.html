@@ -180,6 +180,21 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radiu
 .crate .shine{animation:shn 4.5s ease-in-out infinite}@keyframes shn{0%,55%{transform:translateX(-80px) skewX(-18deg)}100%{transform:translateX(220px) skewX(-18deg)}}
 @keyframes shk{0%,100%{transform:translate(0)}20%{transform:translate(-7px,2px) rotate(-3deg)}40%{transform:translate(7px,-2px) rotate(3deg)}60%{transform:translate(-5px,1px) rotate(-2deg)}80%{transform:translate(5px) rotate(2deg)}}
 .crate.shake{animation:shk .3s 3}.cc .ccb{width:150px;height:150px}.cc svg{width:176px;height:176px;margin:-12px 0;filter:drop-shadow(0 12px 18px #0009)}#cbig svg{filter:drop-shadow(0 14px 22px #000a)}
+
+.qty{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:14px 0}.qty button{min-width:44px;height:44px;border-radius:12px;border:1.5px solid #ffffff2a;background:#0b0916b8;color:#fff;font:700 15px var(--fd);cursor:pointer;transition:.2s}
+.qty button.on{background:linear-gradient(135deg,#22d3ee,#a855f7);color:#07040f;border-color:transparent;box-shadow:0 0 18px #a855f788}
+.qty .fastb{display:flex;align-items:center;gap:6px;padding:0 16px;margin-left:8px;font-size:13px}.qty .fastb svg{width:18px;height:18px}
+.roul.mini{height:118px;margin:10px 0}.roul.mini .cell .sk{height:60px}.roul.mini .cell span{display:none}
+.mbox:has(.many){width:min(680px,94vw)}.mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:10px;width:100%;margin:10px 0}
+.mi{border:1px solid color-mix(in srgb,var(--c) 55%,#222);border-radius:12px;padding:8px 6px;background:radial-gradient(circle at 50% 30%,color-mix(in srgb,var(--c) 25%,transparent),#0b0916);animation:pop .4s both}
+.mi .sk{height:60px;width:100%}.mi b{display:block;font-size:11px;margin-top:4px}.mi span{font-weight:700;color:var(--c);font-size:13px}
+
+.cc{padding:0!important;gap:0!important;overflow:hidden;text-align:left;align-items:stretch!important;background:#0d0b14!important}
+.ccimg{padding:14px 10px 0;background:radial-gradient(ellipse at 50% 70%,color-mix(in srgb,var(--c) 30%,#2b2836),#14121c 75%)}.cc svg{width:100%!important;height:auto!important;margin:0!important;animation:none!important;display:block}
+.cc:hover svg{transform:scale(1.06) translateY(-4px)}.cc svg{transition:transform .25s}
+.ccinfo{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px;background:#0b0a11;border-top:1px solid #ffffff12}.ccinfo b{display:block;font-size:14px}.ccinfo small{color:var(--mute);font-size:11px}.ccinfo .pill{margin:0}
+.crate .lid{transform-origin:74px 56px}.crate.open .lid{transform:translateY(-40px) rotate(-8deg)}.crate .rays{transform-origin:115px 118px}.crate .glow{transition:opacity .4s}.crate.open .glow{opacity:.95}
+#cbig{width:260px}#cbig svg{width:100%;height:auto;animation:fl 4s ease-in-out infinite}
 </style>
 </head>
 <body>
@@ -210,8 +225,8 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radiu
 <main id="app">
   <section class="tab on" id="cases"><h2>Кейси</h2><div class="grid" id="caseGrid"></div><p class="empty" id="odds"></p></section>
   <section class="tab" id="casepage"><button class="btn o" onclick="showTab('cases')">← Усі кейси</button>
-    <div class="chead"><div id="cbig"></div><div><h2 id="ctitle" style="margin-bottom:6px"></h2><small id="cinfo" style="color:var(--mute)"></small><br><br><button class="btn go" id="copen"></button></div></div>
-    <div class="roul" id="roul"><div class="strip" id="strip"></div></div>
+    <div class="chead"><div id="cbig"></div><div><h2 id="ctitle" style="margin-bottom:6px"></h2><small id="cinfo" style="color:var(--mute)"></small><div class="qty" id="qty"></div><button class="btn go" id="copen"></button></div></div>
+    <div class="roul" id="roul"><div class="strip" id="strip"></div></div><div id="multi"></div>
     <h2 style="font-size:20px;margin:30px 0 12px">Вміст кейса</h2><div class="items" id="citems" style="max-height:none"></div></section>
   <section class="tab" id="upgrade"><h2>Апгрейдер</h2>
     <div class="ug"><div id="uTarget"></div>
@@ -267,14 +282,40 @@ const sk=n=>`<img class="sk" loading="lazy" alt="" src="${IMG(n)}" onerror="this
 const card=(i,x='')=>`<div class="card" style="--c:${col(i.rarity)}">${sk(i.name)}<b>${esc(i.name)}</b><small>${i.rarity}</small><span class="price">${i.price}</span>${x}</div>`;
 const avaHtml=(u,c)=>u.avatar?`<img class="${c}" src="${esc(u.avatar)}">`:`<div class="${c}">${esc(u.name[0])}</div>`;
 const ICON={"bolt": "<path d=\"M3-18-9 2h8l-3 16 12-21h-8z\"/>", "pistol": "<path d=\"M-18-9H10v7H-4L-6 12h-8l2-14h-6z\"/>", "smg": "<rect x=\"-19\" y=\"-7\" width=\"32\" height=\"7\" rx=\"2\"/><rect x=\"-4\" y=\"0\" width=\"6\" height=\"14\" rx=\"1\"/><rect x=\"-14\" y=\"0\" width=\"6\" height=\"10\" rx=\"1\"/><rect x=\"13\" y=\"-6\" width=\"6\" height=\"4\"/>", "sun": "<circle r=\"7\"/><path d=\"M0-17v5M0 12v5M-17 0h5M12 0h5M-12-12l3 3M9 9l3 3M12-12l-3 3M-9 9l-3 3\" stroke-width=\"3\" stroke-linecap=\"round\"/>", "rifle": "<rect x=\"-20\" y=\"-4\" width=\"40\" height=\"6\" rx=\"2\"/><rect x=\"-8\" y=\"-9\" width=\"14\" height=\"4\" rx=\"1\"/><rect x=\"-6\" y=\"2\" width=\"6\" height=\"13\" rx=\"1\"/><rect x=\"14\" y=\"-3\" width=\"8\" height=\"10\" rx=\"2\"/>", "heavy": "<rect x=\"-20\" y=\"-5\" width=\"36\" height=\"4\" rx=\"2\"/><rect x=\"-12\" y=\"-1\" width=\"14\" height=\"6\" rx=\"2\"/><rect x=\"14\" y=\"-5\" width=\"8\" height=\"12\" rx=\"2\"/>", "star": "<path d=\"M0-17 5-5 18-5 8 3 12 16 0 8-12 16-8 3-18-5-5-5z\"/>", "scope": "<circle r=\"12\" fill=\"none\" stroke-width=\"3\"/><path d=\"M0-18V-6M0 6v12M-18 0H-6M6 0h12\" stroke-width=\"2.5\"/>", "flame": "<path d=\"M0-18C8-8 14-2 12 8 10 16 0 18-6 14-12 10-10 0-4-4-4-10 0-18Z\"/>", "glove": "<rect x=\"-10\" y=\"0\" width=\"20\" height=\"16\" rx=\"5\"/><rect x=\"-10\" y=\"-14\" width=\"5\" height=\"16\" rx=\"2.5\"/><rect x=\"-3.5\" y=\"-17\" width=\"5\" height=\"19\" rx=\"2.5\"/><rect x=\"3\" y=\"-14\" width=\"5\" height=\"16\" rx=\"2.5\"/><rect x=\"9\" y=\"-6\" width=\"6\" height=\"12\" rx=\"3\" transform=\"rotate(25 12 0)\"/>", "dragon": "<path d=\"M-18 8-10-12-4-2 0-16 4-2 10-12 18 8 8 4 0 14-8 4z\"/>", "knife": "<path d=\"M0-18C8-8 8 4 4 8H-4V-6Z\"/><rect x=\"-3\" y=\"8\" width=\"8\" height=\"10\" rx=\"2\"/>", "karambit": "<path d=\"M-10-14C10-14 16 4 8 14L4 10C8 2 2-6-10-8Z\"/><circle cx=\"-8\" cy=\"-11\" r=\"4\" fill=\"none\" stroke-width=\"2.5\"/>", "butterfly": "<g transform=\"rotate(-28)\"><path d=\"M0-18 4 2H-4Z\"/><rect x=\"-3\" y=\"2\" width=\"6\" height=\"14\" rx=\"2\"/></g><g transform=\"rotate(28)\"><path d=\"M0-18 4 2H-4Z\"/><rect x=\"-3\" y=\"2\" width=\"6\" height=\"14\" rx=\"2\"/></g>", "crown": "<path d=\"M-16 12-18-8-8 0 0-14 8 0 18-8 16 12z\"/>"};
-const TH={"starter": ["#22d3ee", "#7c3aed", "bolt"], "pistol": ["#f97316", "#b91c1c", "pistol"], "smg": ["#a3e635", "#15803d", "smg"], "sand": ["#fbbf24", "#b45309", "sun"], "rifle": ["#38bdf8", "#1d4ed8", "rifle"], "heavy": ["#94a3b8", "#334155", "heavy"], "mix": ["#e879f9", "#6d28d9", "star"], "awp": ["#4ade80", "#166534", "scope"], "redline": ["#f43f5e", "#7f1d1d", "flame"], "gloves": ["#f59e0b", "#78350f", "glove"], "dragon": ["#ef4444", "#450a0a", "dragon"], "knife": ["#67e8f9", "#0e7490", "knife"], "karambit": ["#c084fc", "#581c87", "karambit"], "butterfly": ["#fb7185", "#9d174d", "butterfly"], "elite": ["#fde047", "#a16207", "crown"]};
-const crate=(c,x='')=>{const[a,b,ic]=TH[c.id]||[col(c.tier),'#1b1530','star'],i='k'+c.id+x;let rays='';for(let n=0;n<14;n++){const t=n/14*6.283,u=t+.2;rays+=`M100 100L${100+Math.cos(t)*150} ${100+Math.sin(t)*150}L${100+Math.cos(u)*150} ${100+Math.sin(u)*150}Z`}
- return `<svg class="crate" viewBox="0 0 200 200" aria-hidden="true"><defs><linearGradient id="${i}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient><linearGradient id="${i}m" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#262b36"/><stop offset=".5" stop-color="#6b7384"/><stop offset="1" stop-color="#1e222b"/></linearGradient><radialGradient id="${i}g"><stop offset="0" stop-color="${a}" stop-opacity=".6"/><stop offset="1" stop-color="${a}" stop-opacity="0"/></radialGradient><clipPath id="${i}c"><rect x="36" y="50" width="128" height="124" rx="10"/></clipPath></defs>
- <circle cx="100" cy="115" r="95" fill="url(#${i}g)"/><path class="rays" d="${rays}" fill="${a}" fill-opacity=".22"/><ellipse cx="100" cy="178" rx="64" ry="9" fill="#000" opacity=".55"/>
- <rect x="42" y="84" width="116" height="90" rx="10" fill="url(#${i}f)"/><path d="M52 174 78 84h14l-26 90zM96 174 122 84h14l-26 90z" fill="#000" opacity=".13"/><rect x="42" y="84" width="14" height="90" rx="6" fill="#0b0d12" opacity=".8"/><rect x="144" y="84" width="14" height="90" rx="6" fill="#0b0d12" opacity=".8"/>
- <rect x="64" y="104" width="72" height="54" rx="9" fill="#07040f" stroke="${a}" stroke-width="2.5"/><g transform="translate(100 131) scale(.95)" fill="#fff" stroke="#fff" stroke-linejoin="round">${ICON[ic]||ICON.star}</g>
- <g class="lid"><path d="M46 50h108l10 14H36z" fill="${a}"/><rect x="36" y="64" width="128" height="26" rx="8" fill="url(#${i}m)"/><rect x="36" y="64" width="128" height="4" rx="2" fill="#fff" opacity=".28"/><rect x="68" y="72" width="13" height="22" rx="3" fill="#d6dde8"/><rect x="119" y="72" width="13" height="22" rx="3" fill="#d6dde8"/></g>
- <g clip-path="url(#${i}c)"><rect class="shine" x="20" y="40" width="30" height="150" fill="#fff" opacity=".2"/></g></svg>`};
+const TH={"starter": ["#22d3ee", "#3b4a63", "#1b2233", "rivets", "bolt"], "pistol": ["#fb923c", "#c2410c", "#4a1d08", "hazard", "pistol"], "smg": ["#a3e635", "#3f6212", "#1a2e05", "hex", "smg"], "sand": ["#fbbf24", "#b08a4a", "#5b4220", "camo", "sun"], "rifle": ["#38bdf8", "#1e3a8a", "#0f1d4d", "stripes", "rifle"], "heavy": ["#cbd5e1", "#475569", "#1e293b", "rivets", "heavy"], "mix": ["#e879f9", "#6d28d9", "#2e1065", "circuit", "star"], "awp": ["#4ade80", "#14532d", "#052e16", "camo", "scope"], "redline": ["#f43f5e", "#9f1239", "#3b0a18", "stripes", "flame"], "gloves": ["#fbbf24", "#92400e", "#3b1d0a", "stitch", "glove"], "dragon": ["#ef4444", "#292524", "#0c0a09", "scales", "dragon"], "knife": ["#67e8f9", "#475569", "#0f172a", "hex", "knife"], "karambit": ["#c084fc", "#581c87", "#2e1065", "scales", "karambit"], "butterfly": ["#fb7185", "#9d174d", "#4c0519", "circuit", "butterfly"], "elite": ["#fde047", "#1c1917", "#0a0a0a", "gold", "crown"]};
+const crate=(c,x='')=>{const[A,B,D,P,ic]=TH[c.id]||[col(c.tier),'#3b4a63','#1b2233','rivets','star'],i='k'+c.id+x;let s=0;for(const ch of c.id)s=(s*31+ch.charCodeAt(0))%9973;const rnd=()=>(s=(s*9301+49297)%233280)/233280;
+ let sc='';for(let n=0;n<9;n++){const X=34+rnd()*130,Y=92+rnd()*78,L=6+rnd()*16;sc+=`<path d="M${X} ${Y}l${L} ${rnd()*6-3}" stroke="#fff" stroke-opacity="${.08+rnd()*.14}" stroke-width=".8"/>`}
+ let rays='';for(let n=0;n<14;n++){const t=n/14*6.283,u=t+.2;rays+=`M110 110L${110+Math.cos(t)*170} ${110+Math.sin(t)*170}L${110+Math.cos(u)*170} ${110+Math.sin(u)*170}Z`}
+ const pat={hazard:`<rect width="14" height="14" fill="#f5c518"/><rect width="7" height="14" fill="#111"/>`,camo:`<rect width="44" height="44" fill="#000" opacity=".08"/><ellipse cx="10" cy="12" rx="10" ry="6" fill="#000" opacity=".28"/><ellipse cx="32" cy="30" rx="11" ry="7" fill="#fff" opacity=".13"/><ellipse cx="34" cy="8" rx="7" ry="5" fill="#000" opacity=".2"/>`,hex:`<path d="M9 0l9 5v10l-9 5-9-5V5z" fill="none" stroke="${A}" stroke-opacity=".5" stroke-width="1"/>`,rivets:`<circle cx="9" cy="9" r="2" fill="#fff" opacity=".28"/><circle cx="9" cy="9" r="3.4" fill="none" stroke="#000" opacity=".25"/>`,stripes:`<rect x="2" width="3" height="10" fill="#fff" opacity=".55"/><rect x="7" width="1.4" height="10" fill="${A}" opacity=".9"/>`,circuit:`<path d="M0 10h8l4-5h8M12 20v-6l4-4" fill="none" stroke="${A}" stroke-opacity=".6" stroke-width="1"/><circle cx="20" cy="5" r="1.6" fill="${A}"/>`,scales:`<path d="M0 10a8 8 0 0 1 16 0M-8 5a8 8 0 0 1 16 0M8 5a8 8 0 0 1 16 0" fill="none" stroke="${A}" stroke-opacity=".5" stroke-width="1.2"/>`,stitch:`<path d="M0 6h14" stroke="#fde68a" stroke-opacity=".6" stroke-width="1.4" stroke-dasharray="4 3"/>`,gold:`<rect width="12" height="12" fill="none"/><path d="M0 6h12M6 0v12" stroke="${A}" stroke-opacity=".3"/>`}[P],
+ pw={hazard:14,camo:44,hex:18,rivets:18,stripes:10,circuit:20,scales:16,stitch:14,gold:12}[P],ph={hazard:14,camo:44,hex:20,rivets:18,stripes:10,circuit:20,scales:10,stitch:12,gold:12}[P],rot=P==='hazard'?'rotate(45)':'';
+ const MET=`url(#${i}m)`;
+ return `<svg class="crate" viewBox="0 0 240 210" aria-hidden="true"><defs>
+<linearGradient id="${i}f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${B}"/><stop offset="1" stop-color="${D}"/></linearGradient>
+<linearGradient id="${i}t" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="${B}"/><stop offset="1" stop-color="#fff" stop-opacity=".9"/></linearGradient>
+<linearGradient id="${i}s" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${D}"/><stop offset="1" stop-color="#000"/></linearGradient>
+<linearGradient id="${i}m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e5e9f0"/><stop offset=".5" stop-color="#8a93a3"/><stop offset="1" stop-color="#4b5160"/></linearGradient>
+<radialGradient id="${i}g"><stop offset="0" stop-color="${A}" stop-opacity=".5"/><stop offset="1" stop-color="${A}" stop-opacity="0"/></radialGradient>
+<pattern id="${i}p" width="${pw}" height="${ph}" patternUnits="userSpaceOnUse" patternTransform="${rot}">${pat}</pattern>
+<filter id="${i}n" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="${s%97}"/><feColorMatrix values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .55 0"/></filter>
+<filter id="${i}b" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="3"/></filter>
+<clipPath id="${i}c"><path d="M28 86 74 56H214V146L168 176H28Z"/></clipPath></defs>
+<circle cx="115" cy="118" r="105" fill="url(#${i}g)"/><path class="rays" d="${rays}" fill="${A}" fill-opacity=".2"/>
+<ellipse cx="116" cy="184" rx="100" ry="10" fill="#000" opacity=".6" filter="url(#${i}b)"/>
+<path d="M28 86H168V176H28Z" fill="url(#${i}f)"/><path d="M168 86 214 56V146L168 176Z" fill="url(#${i}s)"/>
+<path class="inside" d="M42 82 80 60H198L160 82Z" fill="#05030a"/><ellipse class="glow" cx="120" cy="72" rx="62" ry="9" fill="${A}" opacity="0"/>
+<g clip-path="url(#${i}c)"><rect x="28" y="86" width="186" height="90" fill="url(#${i}p)" opacity=".34"/><rect x="28" y="56" width="186" height="120" filter="url(#${i}n)" opacity=".5"/>${sc}</g>
+<rect x="44" y="102" width="9" height="74" fill="#000" opacity=".3"/><rect x="143" y="102" width="9" height="74" fill="#000" opacity=".3"/><rect x="53" y="102" width="1.5" height="74" fill="#fff" opacity=".13"/><rect x="152" y="102" width="1.5" height="74" fill="#fff" opacity=".13"/>
+<g transform="matrix(1,-.652,0,1,168,86)"><rect x="9" y="30" width="28" height="12" rx="6" fill="#000" opacity=".55"/><rect x="12" y="33" width="22" height="6" rx="3" fill="${MET}"/>${[0,1,2,3,4].map(n=>`<rect x="${9+n*6}" y="56" width="3" height="22" rx="1.5" fill="#000" opacity=".5"/>`).join('')}<rect x="0" y="0" width="46" height="90" fill="#fff" opacity=".04"/></g>
+<rect x="64" y="116" width="80" height="50" rx="7" fill="#07040f" fill-opacity=".82" stroke="${A}" stroke-width="2"/><rect x="64" y="116" width="80" height="50" rx="7" fill="none" stroke="${A}" stroke-width="5" opacity=".25" filter="url(#${i}b)"/>
+<g transform="translate(104 141) scale(1.1)" fill="${A}" stroke="${A}" stroke-linejoin="round" style="filter:drop-shadow(0 0 4px ${A})">${ICON[ic]||ICON.star}</g>
+<rect x="28" y="160" width="140" height="16" fill="url(#${i}p)" opacity=".5"/>
+<g fill="${MET}" stroke="#0008" stroke-width=".8"><path d="M28 168h18v8H28zM150 168h18v8H150z"/><rect x="26" y="102" width="8" height="30" rx="2"/><rect x="162" y="102" width="8" height="30" rx="2"/></g>
+<g class="lid"><path d="M28 86 74 56H214L168 86Z" fill="url(#${i}t)"/><path d="M28 86H168V102H28Z" fill="${B}"/><path d="M28 86H168V102H28Z" fill="#fff" opacity=".13"/><path d="M168 86 214 56V72L168 102Z" fill="url(#${i}s)"/>
+${[.25,.5,.75].map(t=>`<path d="M${28+46*t} ${86-30*t}H${168+46*t}" stroke="#000" stroke-opacity=".28" stroke-width="2.2"/><path d="M${28+46*t} ${87.4-30*t}H${168+46*t}" stroke="#fff" stroke-opacity=".2" stroke-width="1"/>`).join('')}
+<g clip-path="url(#${i}c)"><path d="M28 86 74 56H214L168 86Z" fill="url(#${i}p)" opacity=".3"/></g>
+<path d="M28 86H168L214 56" fill="none" stroke="${A}" stroke-width="1.6" opacity=".9" style="filter:drop-shadow(0 0 3px ${A})"/><path d="M28 102H168" stroke="#000" stroke-opacity=".5" stroke-width="1.6"/>
+<g fill="${MET}" stroke="#0009" stroke-width=".8"><rect x="58" y="90" width="16" height="30" rx="3"/><rect x="122" y="90" width="16" height="30" rx="3"/><path d="M28 86h12v22H28zM156 86h12v22h-12z"/></g><rect x="62" y="96" width="8" height="14" rx="2" fill="#000" opacity=".5"/><rect x="126" y="96" width="8" height="14" rx="2" fill="#000" opacity=".5"/><circle cx="130" cy="124" r="5.5" fill="none" stroke="${MET}" stroke-width="2.4"/></g>
+<path d="M28 86V176H168L214 146V56" fill="none" stroke="#fff" stroke-opacity=".1"/><rect class="shine" x="14" y="50" width="22" height="140" fill="#fff" opacity=".16" clip-path="url(#${i}c)"/></svg>`};
 
 let luckAt=0,lkSig='';
 const CLOVER='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 11C10 6 4 6 4 10s4 5 8 3c-4 2-6 8-2 9s5-5 2-8c3 3 9 3 9-1s-6-5-9-2c3-3 2-9-2-9S9 7 12 11z"/></svg>',STAR='<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 2 3 7 7 .6-5.3 4.7 1.6 7.2L12 17.8 5.7 21.5l1.6-7.2L2 9.6 9 9z"/></svg>';
@@ -286,7 +327,7 @@ async function load(){let s;try{const r=await fetch('/api/state');if(!r.ok)throw
 function render(){
   const u=S.me;
   $('me').innerHTML=`<button class="btn o" onclick="muted=!muted;localStorage.setItem('mute',muted?1:0);render()" title="Звук">${muted?`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="m16 9 5 6m0-6-5 6"/></svg>`:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/></svg>`}</button>`+(u?`${avaHtml(u,'ava')}<span>${esc(u.name)}</span><b>${Math.round(u.balance)}</b><button class="btn" onclick="openDeposit()">Поповнити</button>`:`<a class="btn" href="/login" onclick="return loginGo()">Увійти через Steam</a>`);
-  $('caseGrid').innerHTML=S.cases.map(c=>`<div class="card cc" style="--c:${col(c.tier)}" onclick="showCase('${c.id}')">${crate(c)}<b>${esc(c.name)}</b><small>${c.n} предметів</small><span class="pill">${c.price}</span></div>`).join('');
+  $('caseGrid').innerHTML=S.cases.map(c=>`<div class="card cc" style="--c:${(TH[c.id]||[col(c.tier)])[0]}" onclick="showCase('${c.id}')"><div class="ccimg">${crate(c)}</div><div class="ccinfo"><div><b>${esc(c.name)}</b><small>${c.n} предметів</small></div><span class="pill">${c.price}</span></div></div>`).join('');
   $('odds').textContent='Чим дорожчий скін, тим рідше він випадає. Ціна кейса завжди вища за середню вартість предметів усередині. В апгрейдері є шанс 1% на NeonDrop.';
   const inv=S.inventory;
   $('invTools').innerHTML=inv.length?`<button class="btn o" id="sellAllBtn" onclick="sellAll()">Продати все · ${inv.reduce((s,i)=>s+i.price,0)}</button>`:'';
@@ -322,25 +363,36 @@ const cell=i=>`<div class="cell" style="--c:${col(i.rarity)}">${sk(i.name)}<span
 function reveal(it,t,neon){modal(`<div class="rev" style="--c:${neon?'#ff2bd6':col(it.rarity)}"><small>${t}</small>${sk(it.name)}<h2>${esc(it.name)}</h2><small>${it.rarity}</small><p class="price">${it.price}</p><div class="rb">${it.inv?`<button class="btn go" style="min-width:0" onclick="sellItem(${it.inv})">Продати за ${it.price}</button><button class="btn o" onclick="closeModal()">Забрати</button>`:`<button class="btn go" onclick="closeModal()">Супер!</button>`}</div></div>`)}
 async function showCase(id){try{const r=await api('/api/case/'+id),c=S.cases.find(x=>x.id===id);cur=id;
   $('cbig').innerHTML=crate(c,'p');$('ctitle').textContent=r.name;$('cinfo').textContent=r.items.length+' предметів · чим дорожчий скін, тим менший шанс';
-  $('copen').textContent='Відкрити за '+r.price;$('copen').onclick=()=>openCase(id);
+  csPrice=r.price;qty=1;paintOpen();$('copen').onclick=()=>openCase(id);$('multi').innerHTML='';$('roul').style.display='block';
   const sh=[...r.items].sort(()=>Math.random()-.5),st=$('strip');st.style.transition='none';st.style.transform='translateX(0)';$('roul').classList.remove('done');
   st.innerHTML=Array.from({length:14},(_,i)=>cell(sh[i%sh.length])).join('');
   $('citems').innerHTML=r.items.map(i=>card(i)).join('');showTab('casepage')}catch(e){}}
-async function openCase(id){if(busy)return;busy=true;$('copen').disabled=true;try{
-  const r=await api('/api/open',{case:id}),st=$('strip');$('roul').classList.remove('done');
-  const cb=document.querySelector('#cbig .crate'),zz=ms=>new Promise(z=>setTimeout(z,ms));if(cb){cb.classList.add('shake');snd('spinFast');await zz(950);cb.classList.remove('shake');cb.classList.add('open');snd('boom');burst($('cbig'),'#ffffff',26);await zz(700);cb.classList.remove('open')}
-  st.style.transition='none';st.style.transform='translateX(0)';st.innerHTML=r.strip.map(cell).join('');
-  const w=$('roul').clientWidth;st.offsetWidth;st.style.transition='transform 7s cubic-bezier(.08,.6,.08,1)';st.style.transform=`translateX(-${r.win*140+70-w/2+(Math.random()*80-40)}px)`;
-  for(let i=1;i<=40;i++)setTimeout(()=>snd('tick'),7000*(1-Math.pow(1-i/40,2.2)));
-  await new Promise(z=>setTimeout(z,7200));const it=r.strip[r.win];$('roul').classList.add('done');st.children[r.win].classList.add('win');dropSnd(it.rarity);burst(st.children[r.win],col(it.rarity),['Covert','Rare Special'].includes(it.rarity)?80:36);
-  await new Promise(z=>setTimeout(z,700));reveal({...it,inv:r.inv},'Випало',false)}catch(e){if(e.code==='auth')loginGo()&&(location.href='/login')}busy=false;$('copen').disabled=false;load()}
+let qty=1,csFast=localStorage.getItem('csFast')==='1',csPrice=0;
+const IC_BOLT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>';
+function paintOpen(){$('qty').innerHTML=[1,2,3,4,5].map(n=>`<button class="${n===qty?'on':''}" onclick="qty=${n};paintOpen()">${n}</button>`).join('')+`<button class="fastb ${csFast?'on':''}" onclick="csFast=!csFast;try{localStorage.setItem('csFast',csFast?1:0)}catch(e){}paintOpen()">${IC_BOLT}Швидко</button>`;$('copen').textContent='Відкрити за '+csPrice*qty}
+function revealMany(L){const tot=L.reduce((s,i)=>s+i.price,0);modal(`<div class="rev many"><small>Випало ${L.length} предметів</small><div class="mg">${L.map(i=>`<div class="mi" style="--c:${col(i.rarity)}">${sk(i.name)}<b>${esc(i.name.split(' | ').pop())}</b><span>${i.price}</span></div>`).join('')}</div><p class="price">Разом ${tot}</p><div class="rb"><button class="btn go" style="min-width:0" onclick="sellMany([${L.map(i=>i.inv)}])">Продати все за ${tot}</button><button class="btn o" onclick="closeModal()">Забрати все</button></div></div>`)}
+async function sellMany(ids){try{const r=await api('/api/sell',{ids});closeModal();toast('Продано · +'+r.total+' монет','ok');snd('sell');load()}catch(e){}}
+async function openCase(id){if(busy)return;busy=true;$('copen').disabled=true;const zz=ms=>new Promise(z=>setTimeout(z,ms));try{
+  const r=await api('/api/open',{case:id,count:qty}),n=r.opens.length,dur=csFast?2.4:7,cb=document.querySelector('#cbig .crate');
+  if(cb&&!csFast){cb.classList.add('shake');snd('spinFast');await zz(950);cb.classList.remove('shake');cb.classList.add('open');snd('boom');burst($('cbig'),'#ffffff',26);await zz(700);cb.classList.remove('open')}else snd('spinFast');
+  const box=$('multi');box.innerHTML='';$('roul').style.display=n===1?'block':'none';
+  const rl=n===1?[$('roul')]:r.opens.map(()=>{const e=document.createElement('div');e.className='roul mini';e.style.display='block';e.innerHTML='<div class="strip"></div>';box.appendChild(e);return e});
+  const ends=rl.map((el,i)=>{const st=el.querySelector('.strip');el.classList.remove('done');st.style.transition='none';st.style.transform='translateX(0)';st.innerHTML=r.opens[i].strip.map(cell).join('');return[el,st,r.opens[i]]});
+  const w=ends[0][0].clientWidth;ends[0][1].offsetWidth;
+  ends.forEach(([el,st,o])=>{st.style.transition=`transform ${dur}s cubic-bezier(.08,.6,.08,1)`;st.style.transform=`translateX(-${o.win*140+70-w/2+(Math.random()*80-40)}px)`});
+  const nt=csFast?18:40;for(let i=1;i<=nt;i++)setTimeout(()=>snd('tick'),dur*1000*(1-Math.pow(1-i/nt,2.2)));
+  await zz(dur*1000+200);ends.forEach(([el,st,o])=>{el.classList.add('done');st.children[o.win].classList.add('win')});
+  const best=r.opens.map(o=>o.strip[o.win]).sort((x,y)=>y.price-x.price)[0];dropSnd(best.rarity);burst(ends[0][1].children[50],col(best.rarity),['Covert','Rare Special'].includes(best.rarity)?80:36);
+  await zz(csFast?250:700);
+  if(n===1)reveal({...r.opens[0].strip[50],inv:r.opens[0].inv},'Випало',false);else revealMany(r.opens.map(o=>({...o.strip[o.win],inv:o.inv})))
+ }catch(e){if(e.code==='auth')loginGo()&&(location.href='/login')}busy=false;$('copen').disabled=false;load()}
 async function withdraw(id){try{await api('/api/withdraw',{id});toast('Запит на вивід надіслано','ok');load()}catch(e){if(e.code==='trade'){showTab('profile');setTimeout(()=>$('ptrade')&&$('ptrade').focus(),100)}}}
 let upStake=null,upTgt=null,upPct=50,upTab_='inv',upList=[],upT=null,upDrag=false,upSpd=localStorage.getItem('upSpd')||'slow';
 function setSpd(s){upSpd=s;try{localStorage.setItem('upSpd',s)}catch(e){}$('spF').classList.toggle('on',s==='fast');$('spS').classList.toggle('on',s==='slow')}
 const lk=()=>{const L=S.luck;if(!L)return 1;const el=Math.floor((Date.now()-luckAt)/1000);return(L.event.left-el>0?L.event.mult:1)*(L.my?L.my.up:1)};
 const baseChance=()=>95*upStake.price/upTgt.price;
-const upChance=()=>Math.min(95,+(baseChance()*lk()).toFixed(2));
-const wheelChance=()=>upDrag||!(upStake&&upTgt)?Math.min(95,+upPct*lk()):upChance();
+const upChance=()=>+baseChance().toFixed(2);
+const wheelChance=()=>upDrag||!(upStake&&upTgt)?+upPct:upChance();
 const uside=(t,i,e)=>`<div class="us" style="--c:${i?col(i.rarity):'#555'}"><small>${t}</small>${i?`${sk(i.name)}<b>${esc(i.name)}</b><span>${i.price}</span>`:`<p>${e}</p>`}</div>`;
 function renderUp(inv){
   if(upStake&&!inv.find(i=>i.id===upStake.id)){upStake=null;upTgt=null;upList=[]}
@@ -348,13 +400,13 @@ function renderUp(inv){
   $('uStake').innerHTML=uside('Ваша ставка',upStake,'Оберіть свій скін нижче');
   $('uTarget').innerHTML=uside(ok?`Ви отримаєте · x${(upTgt.price/upStake.price).toFixed(2)}`:'Ви отримаєте',upTgt,'Оберіть бажаний шанс або скін');
   $('wimg').innerHTML=upTgt?sk(upTgt.name):'';drawWheel();
-  $('pct').value=ok?Math.round(baseChance()):upPct;$('pctv').textContent=wheelChance()+'%';$('pct').style.setProperty('--p',((+$('pct').value-1)/74*100)+'%');$('upInfo').textContent=ok?`x${(upTgt.price/upStake.price).toFixed(2)} · шанс ${upChance()}%`:'';$('spF').classList.toggle('on',upSpd==='fast');$('spS').classList.toggle('on',upSpd==='slow');
+  $('pct').value=ok?Math.max(1,Math.round(baseChance())):upPct;$('pctv').textContent=wheelChance()+'%';$('pct').style.setProperty('--p',((+$('pct').value-1)/74*100)+'%');$('upInfo').textContent=ok?`x${(upTgt.price/upStake.price).toFixed(2)} · шанс ${upChance()}%`:'';$('spF').classList.toggle('on',upSpd==='fast');$('spS').classList.toggle('on',upSpd==='slow');
   $('tabInv').classList.toggle('on',upTab_==='inv');$('tabTgt').classList.toggle('on',upTab_==='tgt');$('usearch').style.display=upTab_==='tgt'?'block':'none';
   $('upGrid').innerHTML=upTab_==='inv'
     ?(inv.length?inv.map(i=>`<div onclick="pickStake(${i.id})" style="cursor:pointer">${card(i).replace('class="card"',`class="card ${upStake&&i.id===upStake.id?'sel':''}"`)}</div>`).join(''):'<p class="empty">Немає предметів для апгрейду.</p>')
     :(!upStake?'<p class="empty">Спочатку оберіть свій скін у вкладці «Мій інвентар».</p>':upList.length?upList.map((i,n)=>`<div onclick="pickTarget(${n})" style="cursor:pointer">${card(i,`<small>шанс ${i.chance}%</small>`).replace('class="card"',`class="card ${upTgt&&i.name===upTgt.name?'sel':''}"`)}</div>`).join(''):'<p class="empty">Нічого не знайдено.</p>')}
 function pickStake(id){upStake=S.inventory.find(i=>i.id===id)||null;upTgt=null;upList=[];$('usearch').value='';upTab_='tgt';if(upStake)loadTargets(true);else renderUp(S.inventory)}
-function pickTarget(n){upTgt=upList[n];upPct=Math.round(upTgt.chance);renderUp(S.inventory);$('wheel').scrollIntoView({behavior:'smooth',block:'center'})}
+function pickTarget(n){upTgt=upList[n];upPct=Math.max(1,Math.round(upTgt.chance));renderUp(S.inventory);$('wheel').scrollIntoView({behavior:'smooth',block:'center'})}
 async function loadTargets(auto){if(!upStake)return;const q=$('usearch').value.trim();
   try{upList=await fetch(`/api/targets?price=${upStake.price}&p=${upPct}&q=${encodeURIComponent(q)}`).then(x=>x.json());
     if(auto)upTgt=upList.length?upList.reduce((a,b)=>Math.abs(b.chance-upPct)<Math.abs(a.chance-upPct)?b:a):null}catch(e){}
