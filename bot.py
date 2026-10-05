@@ -1,7 +1,7 @@
 import time
 import telebot
 from telebot import types
-from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, set_setting, setting, event_luck, wipe_all, backup_now, BK, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
+from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, set_role, ROLES, change_id, staff_reply, tickets_list, ai_decide, AI_KEY, set_setting, setting, event_luck, wipe_all, backup_now, BK, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
 
 bot = telebot.TeleBot(TOKEN)
 B = types.InlineKeyboardButton
@@ -14,6 +14,7 @@ def menu():
     k.add(B("🎟 Промокоди", callback_data="pr"), B("💰 Баланс гравця", callback_data="bal"))
     k.add(B("👤 Акаунт за ID", callback_data="acc"), B("🍀 Удача / івент", callback_data="lk"))
     k.add(B("📢 Повідомлення всім", callback_data="bc"), B("💾 Бекап", callback_data="bk"))
+    k.add(B("💬 Підтримка", callback_data="tk"), B("🤖 ШІ-підтримка", callback_data="ai"))
     k.add(B("📜 Журнал", callback_data="lg"), B("⚠️ Очистити сайт", callback_data="wp"))
     if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))  # Telegram не приймає http/localhost у кнопках
     return k
@@ -90,7 +91,7 @@ def card(uid):
     n = c.execute("SELECT COUNT(*) FROM inv WHERE uid=? AND status='own'", (uid,)).fetchone()[0]
     dep = c.execute("SELECT COALESCE(SUM(uah),0) FROM deposits WHERE uid=? AND status='paid'", (uid,)).fetchone()[0]
     wd = [r[0] for r in c.execute("SELECT item FROM inv WHERE uid=? AND status='withdrawn'", (uid,))]; c.close()
-    return (f"👤 ID {uid} · {u['name']}{' · 🚫 ЗАБЛОКОВАНО' if u['banned'] else ''}\nSteam: https://steamcommunity.com/profiles/{u['steamid']}\n💰 Баланс: {u['balance']:.0f}\n🎒 Предметів: {n}\n💳 Поповнено: {dep:.0f} UAH\n📤 Виведено: {len(wd)} шт. на {sum(CAT[i][1] for i in wd if i in CAT)}\n🔗 Трейд: {u['trade_url'] or '—'}"), u["banned"]
+    return (f"👤 ID {uid} · {u['name']}{' · 🎖 ' + u['role'] if u['role'] else ''}{' · 🚫 ЗАБЛОКОВАНО' if u['banned'] else ''}\nSteam: https://steamcommunity.com/profiles/{u['steamid']}\n💰 Баланс: {u['balance']:.0f}\n🎒 Предметів: {n}\n💳 Поповнено: {dep:.0f} UAH\n📤 Виведено: {len(wd)} шт. на {sum(CAT[i][1] for i in wd if i in CAT)}\n🔗 Трейд: {u['trade_url'] or '—'}"), u["banned"]
 
 
 def show_card(chat, uid):
@@ -102,6 +103,7 @@ def show_card(chat, uid):
     k.add(B("✏️ Змінити нік", callback_data=f"un:{uid}"), B("✉️ Повідомлення", callback_data=f"um:{uid}"))
     k.add(B("🔗 Скинути трейд-URL", callback_data=f"ut:{uid}"), B("✅ Розбанити" if banned else "🚫 Забанити", callback_data=f"uk:{uid}"))
     k.add(B("🍀 Удача акаунта", callback_data=f"ul:{uid}"), B("🗑 Видалити акаунт", callback_data=f"ux:{uid}"))
+    k.add(B("🎖 Роль", callback_data=f"ur:{uid}"), B("🆔 Змінити ID", callback_data=f"uc:{uid}"))
     k.add(B("⬅️ Меню", callback_data="menu"))
     bot.send_message(chat, t, reply_markup=k, disable_web_page_preview=True)
 
@@ -134,6 +136,17 @@ def acc_op(c, d):  # керування акаунтом гравця
         elif op == "us":
             n = PICK[chat][int(p[1])]; give(uid, n); add_note(uid, f"Адміністратор видав вам скін: {n}"); add_log(uid, "admin", f"give {n}")
             bot.send_message(chat, f"🎁 Видано: {n}"); show_card(chat, uid)
+        elif op == "ur":
+            k = types.InlineKeyboardMarkup(row_width=3); k.add(*[B(l, callback_data=f"urs:{uid}:{r or '-'}") for r, l in (("", "Без ролі"),) + tuple(ROLES.items())])
+            bot.send_message(chat, f"🎖 Оберіть роль для ID {uid}:", reply_markup=k)
+        elif op == "urs": r = "" if p[1] == "-" else p[1]; set_role(uid, r); add_log(uid, "admin", f"role={r}"); show_card(chat, uid)
+        elif op == "uc":
+            m = bot.send_message(chat, "🆔 Новий ID (число):")
+            def done(mm):
+                t = (mm.text or "").strip()
+                if not t.isdigit() or not 0 < int(t) < 10**9: return bot.send_message(chat, "Потрібне число 1–999999999")
+                e = change_id(uid, int(t)); bot.send_message(chat, e or f"✅ ID змінено: {uid} → {t}"); show_card(chat, uid if e else int(t))
+            bot.register_next_step_handler(m, done)
         elif op == "ul": ask2("🍀 Удача акаунта: КЕЙСИ АПГРЕЙД ХВИЛИНИ\nнапр. 2 1.5 60 (множники 1–1000, 0 хв = без ліміту), або 0 — скинути:", lambda t: set_luck(uid, t))
         elif op == "un": ask2("✏️ Новий нік:", lambda t: (set_user(uid, "name", t.strip()[:24]), "✅ Нік змінено")[1])
         elif op == "um": ask2("✉️ Текст повідомлення гравцю (з’явиться в його профілі на сайті):", lambda t: (add_note(uid, t[:300]), "✅ Надіслано")[1])
@@ -213,6 +226,20 @@ def cb(c):
     elif d.startswith("ev:"): _, m, mn = d.split(":"); start_event(float(m), int(mn)); bot.send_message(c.message.chat.id, f"🍀 Запущено x{m} на {mn} хв, гравцям надіслано повідомлення")
     elif d == "evx": set_setting("ev_until", 0); bot.send_message(c.message.chat.id, "⛔ Івент зупинено")
     elif d == "evc": ask(c, "Надішліть: МНОЖНИК ХВИЛИНИ (напр. 2 90, множник 1–1000):", lambda t: (start_event(min(1000.0, max(1.0, float(t.split()[0]))), int(t.split()[1])), "🍀 Запущено")[1] if len(t.split()) == 2 else "Формат: 2 90")
+    elif d == "tk":
+        rows = tickets_list(12); k = types.InlineKeyboardMarkup(row_width=1)
+        for r in rows: k.add(B(f"{'🔴' if r['unread'] else '⚪'} ID {r['uid']} {r['name'] or ''}: {(r['last'] or '')[:28]}", callback_data=f"sr:{r['uid']}"))
+        k.add(B("⬅️ Меню", callback_data="menu")); edit(c, "💬 Звернення в підтримку (натисніть, щоб відповісти):" if rows else "Звернень ще немає.", k)
+    elif d.startswith("sr:"):
+        suid = int(d[3:]); ask(c, f"✍️ Відповідь гравцю ID {suid}:", lambda t: (staff_reply(suid, t, 0), "✅ Надіслано")[1] if t.strip() else "Порожній текст")
+    elif d in ("ai", "aiT"):
+        if d == "aiT": set_setting("ai_on", "0" if setting("ai_on", "1") == "1" else "1")
+        on = setting("ai_on", "1") == "1"; k = types.InlineKeyboardMarkup(); k.add(B("⏸ Вимкнути ШІ" if on else "▶️ Увімкнути ШІ", callback_data="aiT")); k.add(B("⬅️ Меню", callback_data="menu"))
+        edit(c, "🤖 ШІ-підтримка: " + ("УВІМКНЕНА" if on else "вимкнена") + ("" if AI_KEY else "\n⚠️ Не задано ANTHROPIC_API_KEY у Render — ШІ не працює, чат отримуєте тільки ви.") + "\nШІ сам відповідає гравцям у чаті. Для дій (баланс, нік, трейд-URL, підтвердження платежу) і складних питань він пише вам сюди з кнопками дозволу.", k)
+    elif d[:3] in ("ao:", "an:", "aa:"):
+        tid = int(d[3:])
+        if d[:2] == "aa": ask(c, "✍️ Ваша відповідь для ШІ (він передасть гравцю):", lambda t: ai_decide(tid, "answer", t))
+        else: bot.send_message(c.message.chat.id, ai_decide(tid, "ok" if d[:2] == "ao" else "no"))
     elif d == "acc":
         m = bot.send_message(c.message.chat.id, "👤 Надішліть ID гравця (число):")
         bot.register_next_step_handler(m, lambda mm: show_card(mm.chat.id, int(mm.text)) if (mm.text or "").strip().isdigit() else bot.send_message(mm.chat.id, "Потрібне число"))
