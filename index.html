@@ -141,7 +141,7 @@ body{background:transparent}
 .upR .btn.go{margin-top:6px}
 @media(max-width:900px){.ug{grid-template-columns:1fr}}
 .promo{display:flex;gap:8px;align-items:center}.promo input{margin:6px 0}.mbox label{display:block;font-size:13px;color:var(--mute)}
-.rb{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+
 
 .pt{position:fixed;width:9px;height:9px;border-radius:50%;z-index:99;pointer-events:none;box-shadow:0 0 10px currentColor}
 @keyframes rise{from{opacity:0;transform:translateY(16px)}}@keyframes gloss{to{left:140%}}
@@ -209,6 +209,15 @@ input[type=range]::-moz-range-thumb{width:24px;height:24px;border:0;border-radiu
 .chn{color:var(--mute);font-size:13px;text-align:center;margin:auto 0;line-height:1.5}.chb{align-self:flex-start;background:none;border:1px solid #ffffff2a;color:#fff;border-radius:9px;padding:5px 10px;cursor:pointer;font-size:12px}
 .tk{padding:10px 12px;border-radius:12px;background:#ffffff0d;border:1px solid #ffffff18;cursor:pointer;position:relative}.tk:hover{background:#ffffff18}.tk b{font-size:13px}.tk small{display:block;color:var(--mute);margin-top:3px}.tk em{position:absolute;right:10px;top:10px;font-style:normal;background:#f43f5e;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700}
 .chf{display:flex;gap:8px;padding:10px;border-top:1px solid #ffffff18}.chf input{flex:1;margin:0}.chf .btn{padding:0 14px;min-width:46px}.chf svg{width:20px;height:20px}
+
+.acts{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px;width:100%}
+.acts .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:46px;min-width:0;padding:0 20px;border-radius:14px;font:600 14px var(--fd);letter-spacing:.02em;cursor:pointer;white-space:nowrap;transition:transform .15s,box-shadow .2s,background .2s}
+.acts .btn svg{width:18px;height:18px;flex:none}.acts .btn:hover{transform:translateY(-2px)}.acts .btn:active{transform:scale(.97)}
+.btn.sell{background:linear-gradient(135deg,#22d3ee,#a855f7);color:#07040f;border:0;box-shadow:0 0 22px #a855f777}.btn.sell:hover{box-shadow:0 0 34px #a855f7cc;color:#07040f}
+.btn.take{background:linear-gradient(180deg,color-mix(in srgb,var(--c,#a855f7) 24%,#ffffff10),#0b0916cc);border:1.5px solid color-mix(in srgb,var(--c,#a855f7) 75%,#fff 10%);color:#fff;box-shadow:0 0 20px color-mix(in srgb,var(--c,#a855f7) 45%,transparent),inset 0 1px 0 #ffffff26}
+.btn.take:hover{background:linear-gradient(180deg,color-mix(in srgb,var(--c,#a855f7) 40%,#ffffff12),#0b0916);box-shadow:0 0 32px color-mix(in srgb,var(--c,#a855f7) 70%,transparent),inset 0 1px 0 #ffffff33;color:#fff}
+.acts.inv{flex-direction:column;gap:8px;margin-top:8px}.acts.inv .btn{width:100%;min-height:40px;padding:0 12px;font-size:13px}.rev .acts{margin-top:16px}
+.fd .rb{display:table;margin:2px auto 3px}
 </style>
 </head>
 <body>
@@ -367,7 +376,7 @@ function render(){
   $('odds').textContent='Чим дорожчий скін, тим рідше він випадає. Ціна кейса завжди вища за середню вартість предметів усередині. В апгрейдері є шанс 1% на NeonDrop.';
   const inv=S.inventory;
   $('invTools').innerHTML=inv.length?`<button class="btn o" id="sellAllBtn" onclick="sellAll()">Продати все · ${inv.reduce((s,i)=>s+i.price,0)}</button>`:'';
-  $('invGrid').innerHTML=inv.length?inv.map(i=>card(i,`<div class="rb"><button class="btn o" onclick="withdraw(${i.id})">Вивести</button><button class="btn" onclick="sellItem(${i.id})">Продати ${i.price}</button></div>`)).join(''):'<p class="empty">Інвентар порожній. Відкрийте кейс.</p>';
+  $('invGrid').innerHTML=inv.length?inv.map(i=>card(i,`<div class="acts inv"><button class="btn take" onclick="withdraw(${i.id})">${IC_OUT}Вивести</button><button class="btn sell" onclick="sellItem(${i.id})">${IC_COIN}Продати ${i.price}</button></div>`)).join(''):'<p class="empty">Інвентар порожній. Відкрийте кейс.</p>';
   renderUp(inv);
   const un=(S.notes||[]).filter(n=>!n.read).length;$('badge').textContent=un;$('badge').style.display=un?'inline-block':'none';
   renderProfile()}
@@ -396,17 +405,19 @@ document.querySelectorAll('#nav button').forEach(b=>b.onclick=()=>showTab(b.data
 
 let bonusUI=null,cur=null;
 const cell=i=>`<div class="cell" style="--c:${col(i.rarity)}">${sk(i.name)}<span>${esc(i.name.split(' | ').pop())}</span></div>`;
-function reveal(it,t,neon){modal(`<div class="rev" style="--c:${neon?'#ff2bd6':col(it.rarity)}"><small>${t}</small>${sk(it.name)}<h2>${esc(it.name)}</h2><small>${it.rarity}</small><p class="price">${it.price}</p><div class="rb">${it.inv?`<button class="btn go" style="min-width:0" onclick="sellItem(${it.inv})">Продати за ${it.price}</button><button class="btn o" onclick="closeModal()">Забрати</button>`:`<button class="btn go" onclick="closeModal()">Супер!</button>`}</div></div>`)}
+function reveal(it,t,neon){modal(`<div class="rev" style="--c:${neon?'#ff2bd6':col(it.rarity)}"><small>${t}</small>${sk(it.name)}<h2>${esc(it.name)}</h2><small>${it.rarity}</small><p class="price">${it.price}</p><div class="acts">${it.inv?`<button class="btn sell" onclick="sellItem(${it.inv})">${IC_COIN}Продати за ${it.price}</button><button class="btn take" onclick="closeModal()">${IC_BAG}Забрати</button>`:`<button class="btn go" onclick="closeModal()">Супер!</button>`}</div></div>`)}
 async function showCase(id){try{const r=await api('/api/case/'+id),c=S.cases.find(x=>x.id===id);cur=id;
   $('cbig').innerHTML=crate(c,'p');$('ctitle').textContent=r.name;$('cinfo').textContent=r.items.length+' предметів · чим дорожчий скін, тим менший шанс';
   csPrice=r.price;qty=1;paintOpen();$('copen').onclick=()=>openCase(id);$('multi').innerHTML='';$('roul').style.display='block';
   const sh=[...r.items].sort(()=>Math.random()-.5),st=$('strip');st.style.transition='none';st.style.transform='translateX(0)';$('roul').classList.remove('done');
   st.innerHTML=Array.from({length:14},(_,i)=>cell(sh[i%sh.length])).join('');
   $('citems').innerHTML=r.items.map(i=>card(i)).join('');showTab('casepage')}catch(e){}}
+const SV=p=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const IC_COIN=SV('<circle cx="12" cy="12" r="9"/><path d="M14.5 9.2A3 3 0 0 0 12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2a3 3 0 0 1-2.5-1.2M12 6.5V8m0 8v1.5"/>'),IC_BAG=SV('<path d="M22 13h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5.1 2 13v5a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5l-3.5-7.9A2 2 0 0 0 16.7 4H7.3a2 2 0 0 0-1.8 1.1z"/>'),IC_OUT=SV('<path d="M7 17 17 7M8 7h9v9"/>');
 let qty=1,csFast=localStorage.getItem('csFast')==='1',csPrice=0;
 const IC_BOLT='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>';
 function paintOpen(){$('qty').innerHTML=[1,2,3,4,5].map(n=>`<button class="${n===qty?'on':''}" onclick="qty=${n};paintOpen()">${n}</button>`).join('')+`<button class="fastb ${csFast?'on':''}" onclick="csFast=!csFast;try{localStorage.setItem('csFast',csFast?1:0)}catch(e){}paintOpen()">${IC_BOLT}Швидко</button>`;$('copen').textContent='Відкрити за '+csPrice*qty}
-function revealMany(L){const tot=L.reduce((s,i)=>s+i.price,0);modal(`<div class="rev many"><small>Випало ${L.length} предметів</small><div class="mg">${L.map(i=>`<div class="mi" style="--c:${col(i.rarity)}">${sk(i.name)}<b>${esc(i.name.split(' | ').pop())}</b><span>${i.price}</span></div>`).join('')}</div><p class="price">Разом ${tot}</p><div class="rb"><button class="btn go" style="min-width:0" onclick="sellMany([${L.map(i=>i.inv)}])">Продати все за ${tot}</button><button class="btn o" onclick="closeModal()">Забрати все</button></div></div>`)}
+function revealMany(L){const tot=L.reduce((s,i)=>s+i.price,0);modal(`<div class="rev many"><small>Випало ${L.length} предметів</small><div class="mg">${L.map(i=>`<div class="mi" style="--c:${col(i.rarity)}">${sk(i.name)}<b>${esc(i.name.split(' | ').pop())}</b><span>${i.price}</span></div>`).join('')}</div><p class="price">Разом ${tot}</p><div class="acts"><button class="btn sell" onclick="sellMany([${L.map(i=>i.inv)}])">${IC_COIN}Продати все за ${tot}</button><button class="btn take" onclick="closeModal()">${IC_BAG}Забрати все</button></div></div>`)}
 async function sellMany(ids){try{const r=await api('/api/sell',{ids});closeModal();toast('Продано · +'+r.total+' монет','ok');snd('sell');load()}catch(e){}}
 async function openCase(id){if(busy)return;busy=true;$('copen').disabled=true;const zz=ms=>new Promise(z=>setTimeout(z,ms));try{
   const r=await api('/api/open',{case:id,count:qty}),n=r.opens.length,dur=csFast?2.4:7,cb=document.querySelector('#cbig .crate');

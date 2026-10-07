@@ -1,7 +1,7 @@
 import time
 import telebot
 from telebot import types
-from app import ADMINS, TOKEN, SITE_URL, db, notify, confirm_deposit, add_note, set_role, ROLES, change_id, staff_reply, tickets_list, ai_decide, AI_KEY, set_setting, setting, event_luck, wipe_all, backup_now, BK, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
+from app import ADMINS, TOKEN, PUBLIC_URL as SITE_URL, db, notify, confirm_deposit, add_note, set_role, ROLES, change_id, staff_reply, tickets_list, ai_decide, ai_learn, faq_rows, faq_del, gh_on, set_setting, setting, event_luck, wipe_all, backup_now, BK, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
 
 bot = telebot.TeleBot(TOKEN)
 B = types.InlineKeyboardButton
@@ -144,8 +144,8 @@ def acc_op(c, d):  # керування акаунтом гравця
             m = bot.send_message(chat, "🆔 Новий ID (число):")
             def done(mm):
                 t = (mm.text or "").strip()
-                if not t.isdigit() or not 0 < int(t) < 10**9: return bot.send_message(chat, "Потрібне число 1–999999999")
-                e = change_id(uid, int(t)); bot.send_message(chat, e or f"✅ ID змінено: {uid} → {t}"); show_card(chat, uid if e else int(t))
+                if not t.isdigit() or not 0 < int(t) < 10**12: return bot.send_message(chat, "Потрібне число від 1 до 999999999999")
+                e, other = change_id(uid, int(t)); bot.send_message(chat, e or f"✅ ID змінено: {uid} → {t}" + (f"\n🔁 ID {t} був зайнятий гравцем «{other}» — акаунти поміняно місцями (тепер у нього ID {uid})." if other else "")); show_card(chat, uid if e else int(t))
             bot.register_next_step_handler(m, done)
         elif op == "ul": ask2("🍀 Удача акаунта: КЕЙСИ АПГРЕЙД ХВИЛИНИ\nнапр. 2 1.5 60 (множники 1–1000, 0 хв = без ліміту), або 0 — скинути:", lambda t: set_luck(uid, t))
         elif op == "un": ask2("✏️ Новий нік:", lambda t: (set_user(uid, "name", t.strip()[:24]), "✅ Нік змінено")[1])
@@ -213,7 +213,7 @@ def cb(c):
     elif d == "pr_new":
         ask(c, "🎟 " + HELP_PROMO, do_promo)
     elif d == "bc": ask(c, "📢 Текст повідомлення всім гравцям:", lambda t: f"✅ Надіслано {broadcast(t)} гравцям" if t.strip() else "Порожній текст")
-    elif d == "bk": backup_now(True); bot.send_message(c.message.chat.id, "💾 Бекап: " + BK["state"])
+    elif d == "bk": backup_now(True); bot.send_message(c.message.chat.id, "💾 Бекап: " + BK["state"] + ("\n✅ GitHub підключено — дані переживають перезапуски." if gh_on() else "\n⚠️ GitHub не підключено (змінні GH_TOKEN, GH_REPO у Render) — працює лише резервний бекап у Telegram, він може не спрацювати."))
     elif d == "wp":
         k = types.InlineKeyboardMarkup(); k.add(B("⚠️ Так, продовжити", callback_data="wp2"), B("Скасувати", callback_data="menu"))
         bot.send_message(c.message.chat.id, "Це видалить ВСІХ гравців, інвентар, платежі, промокоди й налаштування. Скіни лишаться.", reply_markup=k)
@@ -234,11 +234,19 @@ def cb(c):
         suid = int(d[3:]); ask(c, f"✍️ Відповідь гравцю ID {suid}:", lambda t: (staff_reply(suid, t, 0), "✅ Надіслано")[1] if t.strip() else "Порожній текст")
     elif d in ("ai", "aiT"):
         if d == "aiT": set_setting("ai_on", "0" if setting("ai_on", "1") == "1" else "1")
-        on = setting("ai_on", "1") == "1"; k = types.InlineKeyboardMarkup(); k.add(B("⏸ Вимкнути ШІ" if on else "▶️ Увімкнути ШІ", callback_data="aiT")); k.add(B("⬅️ Меню", callback_data="menu"))
-        edit(c, "🤖 ШІ-підтримка: " + ("УВІМКНЕНА" if on else "вимкнена") + ("" if AI_KEY else "\n⚠️ Не задано ANTHROPIC_API_KEY у Render — ШІ не працює, чат отримуєте тільки ви.") + "\nШІ сам відповідає гравцям у чаті. Для дій (баланс, нік, трейд-URL, підтвердження платежу) і складних питань він пише вам сюди з кнопками дозволу.", k)
+        on = setting("ai_on", "1") == "1"; k = types.InlineKeyboardMarkup(row_width=1); k.add(B("⏸ Вимкнути ШІ" if on else "▶️ Увімкнути ШІ", callback_data="aiT"), B("📚 Навчені відповіді", callback_data="fq"), B("⬅️ Меню", callback_data="menu"))
+        edit(c, "🤖 Власна ШІ-підтримка: " + ("УВІМКНЕНА" if on else "вимкнена") + f"\nНавчених відповідей: {len(faq_rows(1000))}\nВона працює всередині сайту (без зовнішніх сервісів): розуміє питання про поповнення, вивід, апгрейд, промокоди, баланс. Дії (підтвердити платіж, змінити нік, скинути трейд-URL) робить ТІЛЬКИ після вашого дозволу, а чого не знає — питає вас і вчиться з вашої відповіді.", k)
+    elif d == "fq":
+        rows = faq_rows(12); k = types.InlineKeyboardMarkup(row_width=1)
+        for r in rows: k.add(B(f"🗑 {r['q'][:30]} → {r['a'][:20]}", callback_data=f"fd:{r['id']}"))
+        k.add(B("⬅️ Назад", callback_data="ai")); edit(c, "📚 Навчені відповіді (натисніть, щоб видалити):" if rows else "Навчених відповідей ще немає. Після вашої відповіді ШІ-підтримці з’явиться кнопка «Запам’ятати».", k)
+    elif d.startswith("fd:"): faq_del(int(d[3:])); bot.send_message(c.message.chat.id, "🗑 Видалено")
+    elif d.startswith("al:"): bot.send_message(c.message.chat.id, ai_learn(int(d[3:])))
     elif d[:3] in ("ao:", "an:", "aa:"):
         tid = int(d[3:])
-        if d[:2] == "aa": ask(c, "✍️ Ваша відповідь для ШІ (він передасть гравцю):", lambda t: ai_decide(tid, "answer", t))
+        if d[:2] == "aa":
+            m = bot.send_message(c.message.chat.id, "✍️ Ваша відповідь (її отримає гравець):"); lk = types.InlineKeyboardMarkup(); lk.add(B("💾 Запам’ятати для схожих питань", callback_data=f"al:{tid}"))
+            bot.register_next_step_handler(m, lambda mm: bot.send_message(mm.chat.id, ai_decide(tid, "answer", mm.text or ""), reply_markup=lk))
         else: bot.send_message(c.message.chat.id, ai_decide(tid, "ok" if d[:2] == "ao" else "no"))
     elif d == "acc":
         m = bot.send_message(c.message.chat.id, "👤 Надішліть ID гравця (число):")
