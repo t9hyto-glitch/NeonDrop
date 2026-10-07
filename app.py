@@ -7,8 +7,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 # ---------- Конфіг ----------
 TOKEN = os.getenv("BOT_TOKEN", "8841389440:AAHtgzD5A-Qqwt6P2a1e0KWD8RvLSCf2QoI")  # репозиторій на GitHub має бути PRIVATE; змінна BOT_TOKEN у Render, якщо задана, має пріоритет
 ADMINS = [7952645598, 6526861547]
-SITE_URL = (os.getenv("SITE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "http://127.0.0.1:5000").rstrip("/")  # публічний https, потрібен для входу через Steam
-PRIMARY_DOMAIN = os.getenv("PRIMARY_DOMAIN", "neondrop.fun").strip().lower()  # основний домен; порожнє значення вимикає перенаправлення
+SITE_URL = (os.getenv("SITE_URL") or os.getenv("RENDER_EXTERNAL_URL") or "https://neondrop-rm5p.onrender.com").rstrip("/")  
+PRIMARY_DOMAIN = os.getenv("PRIMARY_DOMAIN", "").strip().lower()
 PUBLIC_URL = ("https://" + PRIMARY_DOMAIN) if PRIMARY_DOMAIN else SITE_URL  # посилання для людей (кнопка в боті тощо)
 ALLOWED_HOSTS = {h.strip().lower() for h in [PRIMARY_DOMAIN, "www." + PRIMARY_DOMAIN if PRIMARY_DOMAIN else "", urlparse(SITE_URL).hostname or "", *os.getenv("EXTRA_HOSTS", "").split(",")] if h.strip()}
 
