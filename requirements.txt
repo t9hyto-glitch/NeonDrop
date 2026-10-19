@@ -1,4 +1,4 @@
-Flask
-Flask-SQLAlchemy
+flask
+requests
 pyTelegramBotAPI
 gunicorn

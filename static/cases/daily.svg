@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320">
+<defs>
+<radialGradient id="g"><stop offset="0" stop-color="#3be08a" stop-opacity=".55"/><stop offset="1" stop-color="#3be08a" stop-opacity="0"/></radialGradient>
+<linearGradient id="L" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2ca867"/><stop offset="1" stop-color="#144e30"/></linearGradient>
+<linearGradient id="R" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3be08a"/><stop offset="1" stop-color="#1a643e"/></linearGradient>
+<linearGradient id="T" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".9"/><stop offset="1" stop-color="#3be08a"/></linearGradient>
+<linearGradient id="M" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f4f4"/><stop offset="1" stop-color="#5b5f66"/></linearGradient>
+<linearGradient id="B" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+</defs>
+<circle cx="160" cy="160" r="152" fill="url(#g)"/>
+<polygon points="135,6 185,6 252,150 68,150" fill="url(#B)" opacity=".3"/>
+<ellipse cx="160" cy="298" rx="98" ry="12" fill="#000" opacity=".4"/>
+<polygon points="52,105 160,160 160,285 52,230" fill="url(#L)"/>
+<polygon points="268,105 160,160 160,285 268,230" fill="url(#R)"/>
+<polygon points="160,50 268,105 160,160 52,105" fill="url(#T)"/>
+<path d="M106 77L214 132M214 77L106 132" stroke="#144e30" stroke-opacity=".35" stroke-width="7"/>
+<path d="M52 105L160 160L268 105M160 160V285M52 230L160 285L268 230M52 105V230M268 105V230" stroke="url(#M)" stroke-width="8" fill="none" stroke-linejoin="round"/>
+<g fill="#fff" stroke="#444" stroke-width="1"><circle cx="160" cy="176" r="4"/><circle cx="160" cy="268" r="4"/><circle cx="60" cy="118" r="4"/><circle cx="260" cy="118" r="4"/></g>
+<g transform="translate(64,138) skewY(27) scale(.98)" fill="#fff"><rect x="12" y="38" width="66" height="44" rx="4"/><rect x="8" y="26" width="74" height="16" rx="4"/><rect x="39" y="26" width="12" height="56" fill="#114329"/><path d="M45 26C28 2 8 14 28 26M45 26C62 2 82 14 62 26" fill="none" stroke="#fff" stroke-width="6"/></g>
+<g transform="translate(168,208) skewY(-27)"><rect width="92" height="24" rx="4" fill="#06060c" fill-opacity=".8" stroke="#3be08a" stroke-width="1.5"/><text x="46" y="16" font-family="Arial,Helvetica,sans-serif" font-size="10" font-weight="700" fill="#fff" text-anchor="middle" textLength="78" lengthAdjust="spacingAndGlyphs">FREE DAILY</text></g>
+</svg>

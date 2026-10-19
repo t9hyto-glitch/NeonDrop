@@ -1,0 +1,32 @@
+NEONDROP — КРАТКАЯ ИНСТРУКЦИЯ  (домен: https://neondrop-rm5p.onrender.com)
+
+1. ФАЙЛЫ. Скопируй ВСЕ файлы этой папки в репозиторий GitHub с заменой (index.html — в templates/, папка static/ рядом с app.py).
+   Удали из репозитория старые *.db, *.pyc и старый index.html в корне. Репозиторий должен быть PRIVATE (в app.py стоят токен бота и карта).
+
+2. RENDER -> Settings: Build Command: pip install -r requirements.txt   (Start Command менять не нужно — всё в gunicorn.conf.py)
+
+3. RENDER -> Environment:
+   BOT_TOKEN (необязательно, если токен в app.py; переменная главнее), PAY_CARD, COINS_PER_UAH=2.4, SECRET (по желанию)
+   GH_TOKEN + GH_REPO   — хранение базы на GitHub (иначе аккаунты сбрасываются при перезапуске), см. п. 5
+   AI_KEY (+ AI_MODEL, AI_URL) — языковая модель для ШИ-агента, см. п. 6
+   Домен: сайт всегда работает на neondrop-rm5p.onrender.com (PRIMARY_DOMAIN уже так стоит в коде, переменную добавлять не нужно).
+
+4. ПРОВЕРКА: https://neondrop-rm5p.onrender.com/health -> bot=on webhook=ok backup=ok ... -> github
+
+5. ХРАНЕНИЕ БАЗЫ НА GITHUB:
+   а) github.com -> New repository -> neondrop-data -> Private -> "Add a README file" -> Create.
+   б) Settings -> Developer settings -> Personal access tokens -> Fine-grained tokens -> Generate: только репозиторий neondrop-data, Contents: Read and write.
+   в) Render -> Environment: GH_TOKEN = токен, GH_REPO = t9hyto-glitch/neondrop-data  -> Deploy.
+
+6. ШИ-АГЕНТ (свободный разговор на украинском + решает проблемы):
+   Языковую модель на бесплатном Render запустить нельзя, поэтому она подключается извне (логика агента, инструменты, лимиты, одобрения — наши):
+   - Claude API:  AI_KEY = ключ с console.anthropic.com   (AI_MODEL по умолчанию claude-haiku-4-5-20251001)
+   - любой OpenAI-совместимый сервис или свой сервер (Groq, OpenRouter, Gemini-compat, Ollama, vLLM):
+       AI_URL = базовый URL API, AI_KEY = ключ, AI_MODEL = имя модели
+   Без модели работает упрощённый режим (правила, тоже по-украински).
+   Управление в Telegram-боте -> "ШІ-підтримка": вкл/выкл, автономность 1-3, лимиты, правила для ШИ (свободный текст), список действий ШИ с кнопкой "Скасувати".
+   Автономность: 1 — всё через твоё одобрение; 2 (по умолчанию) — сам делает безопасное (ник, сброс трейд-ссылки, уведомления), деньги только с одобрением;
+   3 — ещё сам даёт компенсации в лимите; подтверждение платежей сам — только если задашь лимит в грн (по умолчанию выключено: банковский перевод ШИ проверить не может).
+
+7. РОЛИ / ЧАТ: свою учётку сделай Owner (бот -> "Акаунт за ID" -> "Роль"); в чате на сайте владелец вводит /admin ID, /support ID, /vip ID, /youtuber ID, /user ID.
+   ID игрока можно поставить любой (если занят — аккаунты меняются местами).

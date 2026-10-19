@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: neondrop
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app --workers 1 --threads 4 --timeout 120
+    healthCheckPath: /health
+    envVars:
+      - key: SECRET
+        generateValue: true
+      - key: BOT_TOKEN
+        sync: false
+      - key: STEAM_API_KEY
+        sync: false
+      - key: PAY_CARD
+        sync: false
+      - key: COINS_PER_UAH
+        value: "2.4"
