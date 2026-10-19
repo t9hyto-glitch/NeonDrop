@@ -10,10 +10,7 @@ def norm(t):
 
 
 def words(t): return norm(t).split()
-UA_WORDS = {"як", "що", "чи", "мені", "мене", "мій", "моя", "мої", "моє", "та", "але", "також", "вже", "ще", "дуже", "треба", "потрібно", "будь", "ласка", "дякую", "привіт", "вітаю", "який", "яка", "які", "коли", "чому", "куди", "звідки", "скільки", "можна", "хочу", "допоможіть"}
-def lang(t):
-    tl = (t or "").lower()
-    return "ua" if re.search(r"[іїєґ]", tl) or any(w in UA_WORDS for w in re.findall(r"\w+", tl)) else "ru"
+def lang(t): return "ua"  # ШІ завжди говорить українською
 def T(L, ua, ru): return ua if L == "ua" else ru
 def has(ws, *pre): return any(w.startswith(p) for w in ws for p in pre)
 def exact(ws, *x): return any(w in x for w in ws)

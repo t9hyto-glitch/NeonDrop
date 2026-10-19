@@ -1,7 +1,7 @@
 import time
 import telebot
 from telebot import types
-from app import ADMINS, TOKEN, PUBLIC_URL as SITE_URL, db, notify, confirm_deposit, add_note, set_role, ROLES, change_id, staff_reply, tickets_list, ai_decide, ai_learn, faq_rows, faq_del, gh_on, set_setting, setting, event_luck, wipe_all, backup_now, BK, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
+from app import ADMINS, TOKEN, PUBLIC_URL as SITE_URL, db, notify, confirm_deposit, add_note, set_role, ROLES, change_id, staff_reply, tickets_list, ai_decide, ai_learn, faq_rows, faq_del, gh_on, ai_conf, LEVELS, llm_status, ai_actions_list, ai_undo, set_setting, setting, event_luck, wipe_all, backup_now, BK, adjust_balance, promo_save, promo_del, promos_list, release_promo, CAT, give, add_log
 
 bot = telebot.TeleBot(TOKEN)
 B = types.InlineKeyboardButton
@@ -16,6 +16,7 @@ def menu():
     k.add(B("📢 Повідомлення всім", callback_data="bc"), B("💾 Бекап", callback_data="bk"))
     k.add(B("💬 Підтримка", callback_data="tk"), B("🤖 ШІ-підтримка", callback_data="ai"))
     k.add(B("📜 Журнал", callback_data="lg"), B("⚠️ Очистити сайт", callback_data="wp"))
+    k.add(B("🩺 Діагностика", callback_data="dg"))
     if SITE_URL.startswith("https://"): k.add(B("🌐 Сайт", url=SITE_URL))  # Telegram не приймає http/localhost у кнопках
     return k
 
@@ -43,11 +44,20 @@ def do_promo(t):
     promo_save(code, pct, mx); return f"✅ Промокод {code}: +{pct:g}% до поповнення, ліміт {mx or '∞'}"
 
 
-@bot.message_handler(commands=["give", "promo", "delpromo"], func=lambda m: m.from_user.id in ADMINS)
+def diag_text():  # /diag або кнопка «Діагностика»: що Telegram думає про webhook бота
+    try:
+        i = bot.get_webhook_info()
+        err = f"{i.last_error_message} ({time.strftime('%H:%M:%S', time.localtime(i.last_error_date))})" if getattr(i, "last_error_message", None) and getattr(i, "last_error_date", None) else "—"
+        return f"🩺 Webhook: {i.url or 'НЕ ВСТАНОВЛЕНО'}\nОчікує оновлень: {i.pending_update_count}\nДозволені оновлення: {i.allowed_updates or 'усі'}\nОстання помилка Telegram: {err}\nБекап: {BK['state']}"
+    except Exception as e: return "🩺 Помилка діагностики: " + str(e)[:150]
+
+
+@bot.message_handler(commands=["give", "promo", "delpromo", "diag"], func=lambda m: m.from_user.id in ADMINS)
 def cmds(m):
     cmd, _, arg = m.text.partition(" "); cmd = cmd.split("@")[0]
     if cmd == "/give": r = do_balance(arg)
     elif cmd == "/promo": r = do_promo(arg)
+    elif cmd == "/diag": r = diag_text()
     else: r = "🗑 Видалено" if promo_del(arg.strip().upper()) else "Такого промокоду немає"
     bot.send_message(m.chat.id, r)
 
@@ -180,8 +190,7 @@ def edit(c, text, kb):
     bot.edit_message_text(text, c.message.chat.id, c.message.message_id, reply_markup=kb)
 
 
-@bot.callback_query_handler(func=lambda c: True)
-def cb(c):
+def _cb(c):
     if c.from_user.id not in ADMINS:
         return bot.answer_callback_query(c.id, "Немає доступу", show_alert=True)
     d = c.data; con = db()
@@ -232,10 +241,24 @@ def cb(c):
         k.add(B("⬅️ Меню", callback_data="menu")); edit(c, "💬 Звернення в підтримку (натисніть, щоб відповісти):" if rows else "Звернень ще немає.", k)
     elif d.startswith("sr:"):
         suid = int(d[3:]); ask(c, f"✍️ Відповідь гравцю ID {suid}:", lambda t: (staff_reply(suid, t, 0), "✅ Надіслано")[1] if t.strip() else "Порожній текст")
-    elif d in ("ai", "aiT"):
+    elif d in ("ai", "aiT", "aiL"):
         if d == "aiT": set_setting("ai_on", "0" if setting("ai_on", "1") == "1" else "1")
-        on = setting("ai_on", "1") == "1"; k = types.InlineKeyboardMarkup(row_width=1); k.add(B("⏸ Вимкнути ШІ" if on else "▶️ Увімкнути ШІ", callback_data="aiT"), B("📚 Навчені відповіді", callback_data="fq"), B("⬅️ Меню", callback_data="menu"))
-        edit(c, "🤖 Власна ШІ-підтримка: " + ("УВІМКНЕНА" if on else "вимкнена") + f"\nНавчених відповідей: {len(faq_rows(1000))}\nВона працює всередині сайту (без зовнішніх сервісів): розуміє питання про поповнення, вивід, апгрейд, промокоди, баланс. Дії (підтвердити платіж, змінити нік, скинути трейд-URL) робить ТІЛЬКИ після вашого дозволу, а чого не знає — питає вас і вчиться з вашої відповіді.", k)
+        if d == "aiL": set_setting("ai_level", str(ai_conf()["level"] % 3 + 1))
+        cf = ai_conf(); on = setting("ai_on", "1") == "1"; k = types.InlineKeyboardMarkup(row_width=1)
+        k.add(B("⏸ Вимкнути ШІ" if on else "▶️ Увімкнути ШІ", callback_data="aiT"), B(f"🎚 Автономність: {cf['level']}/3 (змінити)", callback_data="aiL"), B("💰 Ліміти ШІ", callback_data="aiC"), B("📝 Правила для ШІ", callback_data="aiR"), B("📜 Дії ШІ (скасування)", callback_data="aiH"), B("📚 Навчені відповіді", callback_data="fq"), B("⬅️ Меню", callback_data="menu"))
+        edit(c, f"🤖 ШІ-агент: {'УВІМКНЕНИЙ' if on else 'вимкнений'}\nМовна модель: {llm_status()}\nАвтономність {cf['level']}/3: {LEVELS[cf['level']]}\nЛіміти: компенсація ≤ {cf['cap']:.0f} монет за раз, ≤ {cf['daycap']:.0f} на гравця за добу; авто-платіж ≤ {cf['dep_auto']:.0f} грн (0 = вимкнено).\nПравила: {cf['rules'][:160] or '—'}", k)
+    elif d == "aiC":
+        def lim(t):
+            try: x, y, z = (float(v) for v in t.replace(",", ".").split()[:3]); assert min(x, y, z) >= 0
+            except Exception: return "Формат: КОМПЕНСАЦІЯ_ЗА_РАЗ МАКС_НА_ДОБУ АВТО_ПЛАТІЖ_ГРН, напр. 500 1000 0"
+            set_setting("ai_cap", x); set_setting("ai_daycap", y); set_setting("ai_dep_auto", z); return f"✅ Ліміти: ≤{x:.0f} за раз, ≤{y:.0f} на добу, авто-платіж ≤{z:.0f} грн (діє на рівні 3)"
+        ask(c, "💰 Надішліть: КОМПЕНСАЦІЯ_ЗА_РАЗ МАКС_НА_ДОБУ АВТО_ПЛАТІЖ_ГРН\nнапр. 500 1000 0 (автопідтвердження платежів вимкнено, якщо 0)", lim)
+    elif d == "aiR": ask(c, "📝 Надішліть правила для ШІ одним повідомленням (або «-», щоб очистити). Напр.: «Не давай компенсацій новим акаунтам. Якщо скаржаться на вивід довше доби — одразу нагадай мені».", lambda t: (set_setting("ai_rules", "" if t.strip() == "-" else t.strip()[:800]), "✅ Правила збережено")[1])
+    elif d == "aiH":
+        rows = ai_actions_list(8); k = types.InlineKeyboardMarkup(row_width=1)
+        for r in rows: k.add(B(("↩️ " if r["undo"] and not r["undone"] else "• ") + f"#{r['id']} ID{r['uid']} {r['action']} {'(скасовано)' if r['undone'] else ''}", callback_data=f"au:{r['id']}" if r["undo"] and not r["undone"] else "ai"))
+        k.add(B("⬅️ Назад", callback_data="ai")); edit(c, "📜 Останні дії ШІ (натисніть ↩️, щоб скасувати):" if rows else "ШІ ще нічого не робив.", k)
+    elif d.startswith("au:"): bot.send_message(c.message.chat.id, ai_undo(int(d[3:])))
     elif d == "fq":
         rows = faq_rows(12); k = types.InlineKeyboardMarkup(row_width=1)
         for r in rows: k.add(B(f"🗑 {r['q'][:30]} → {r['a'][:20]}", callback_data=f"fd:{r['id']}"))
@@ -248,6 +271,7 @@ def cb(c):
             m = bot.send_message(c.message.chat.id, "✍️ Ваша відповідь (її отримає гравець):"); lk = types.InlineKeyboardMarkup(); lk.add(B("💾 Запам’ятати для схожих питань", callback_data=f"al:{tid}"))
             bot.register_next_step_handler(m, lambda mm: bot.send_message(mm.chat.id, ai_decide(tid, "answer", mm.text or ""), reply_markup=lk))
         else: bot.send_message(c.message.chat.id, ai_decide(tid, "ok" if d[:2] == "ao" else "no"))
+    elif d == "dg": bot.send_message(c.message.chat.id, diag_text())
     elif d == "acc":
         m = bot.send_message(c.message.chat.id, "👤 Надішліть ID гравця (число):")
         bot.register_next_step_handler(m, lambda mm: show_card(mm.chat.id, int(mm.text)) if (mm.text or "").strip().isdigit() else bot.send_message(mm.chat.id, "Потрібне число"))
@@ -279,6 +303,19 @@ def cb(c):
         cur = con.execute("UPDATE inv SET status='withdrawn' WHERE id=? AND status='withdraw'", (int(d[6:]),)); con.commit()
         bot.edit_message_text(f"{c.message.text}\n\n{'✅ Виконано' if cur.rowcount else 'Вже оброблено'}", c.message.chat.id, c.message.message_id)
     con.close(); bot.answer_callback_query(c.id)
+
+
+@bot.callback_query_handler(func=lambda c: True)
+def cb(c):  # обгортка: помилку кнопки видно в чаті, а «годинник» на кнопці гаситься завжди
+    try: _cb(c)
+    except Exception as e:
+        s = str(e)
+        if "not modified" not in s and "query is too old" not in s and "query ID is invalid" not in s:
+            try: bot.send_message(c.message.chat.id, f"⚠️ Помилка кнопки «{c.data}»: {s[:220]}")
+            except Exception: pass
+    finally:
+        try: bot.answer_callback_query(c.id)
+        except Exception: pass
 
 
 if __name__ == "__main__":
